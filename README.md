@@ -34,6 +34,7 @@ bash release.sh buildimage
 ```
 
 The image name is `conker-example-app:latest`.
+
 Then get the image Id for attestation.
 
 ```bash
