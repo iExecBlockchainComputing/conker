@@ -13,7 +13,7 @@ sudo bash install.sh setconf &&
 sudo bash install.sh run host
 ```
 
-# Ensure that Conker is running
+Ensure that Conker is running
 
 ```bash
 service conker-5 status
