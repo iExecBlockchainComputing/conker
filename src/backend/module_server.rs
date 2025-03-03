@@ -32,7 +32,7 @@ use tracing::{debug, error, info /*trace, warn*/};
 // ====================================
 // const
 // ====================================
-const DEFAULT_ADDRESS: &'static str = "0.0.0.0:1337";
+const DEFAULT_ADDRESS: &'static str = "0.0.0.0:8383";
 
 const ROUTE_SW_API_V1: &'static str = "/sw/api/v1";
 const ROUTE_SW_API_V1_CONTAINER: &'static str = formatcp!("{}/container", ROUTE_SW_API_V1);
