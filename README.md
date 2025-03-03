@@ -13,7 +13,7 @@ sudo bash install.sh setconf &&
 sudo bash install.sh run host
 ```
 
-Ensure that Conker is running
+Ensure that Conker is running:
 
 ```bash
 service conker-5 status
@@ -33,14 +33,14 @@ cd example/gotest/hack
 bash release.sh buildimage
 ```
 
-# The image name is `conker-example-app:latest`
-# Then get the image Id for attestation.
+The image name is `conker-example-app:latest`.
+Then get the image Id for attestation.
 
 ```bash
 docker inspect conker-example-app:latest | grep Id
 ```
 
-# Remove the `sha256:` prefix , get the hash value like `ba6acccedd2923aee....`
+Remove the `sha256:` prefix , get the hash value like `ba6acccedd2923aee...`.
 
 ## 4.deploy the secret server 
 
@@ -59,17 +59,17 @@ echo {\"key\":\"123456\"} > $(pwd)/local-secret/secret.json
 docker run --net=host -v $(pwd)/local-secret:/secret secret-broker-server -m -i 0.0.0.0 -p 3333  -w <CVM's measurement> -v tdx_ecdsa -a nullattester -s /secret/secret.json
 ```
 
-# Example
+Example:
 
 ```bash
 docker run --net=host -v $(pwd)/local-secret:/secret secret-broker-server -m -i 0.0.0.0 -p 3333  -v tdx_ecdsa -a nullattester -s /secret/secret.json -d 5d46e8181aa30e0b217de650b4e26c1f155ad4a7a851d3d06b585173207366f7 -w ad9e5e8b206fd3c17bf550cf5b0892d4e1a8a3ca06720263ba11a4bf8a9a648cc8a82df2ed76f15e1753e9ea8704e326
 ```
 
-# `-w` for set cvm's measurement, for tdx is the hash of rtmr[1]
-# `-s` for set json format secret, support hot load
-# `-p` for set server's port 
+`-w` for set cvm's measurement, for tdx is the hash of rtmr[1]
+`-s` for set json format secret, support hot load
+`-p` for set server's port 
 
-# After running the server, get the server's endpoint called `kmsendpoint` as belows.
+After running the server, get the server's endpoint called `kmsendpoint` as belows.
 
 ## 4. Deploy the app container 
 
@@ -119,7 +119,7 @@ curl --location --request POST 'http://192.168.122.5:8383/sw/api/v1/container' \
 }'
 ```
 
-# In the Container create config:
+In the Container create config:
 
 `ImageName` is the Docker image URL you want to run in the CVM, it always pull from remote register;
 `RegisterAuthInfo` is the regiser auth info needed if the image is private;
@@ -301,16 +301,16 @@ curl --location --request GET 'http://192.168.122.5:8383/sw/api/v1/container' \
     }
 ```
 
-# If you see ContainerInspect.State.Status = Running, it means that your container is running successfully.
-# Otherwise you can read the events to find errors.
+If you see ContainerInspect.State.Status = Running, it means that your container is running successfully.
+Otherwise you can read the events to find errors.
 
-# If it's running successfully, you can get the secret like this: 
+If it's running successfully, you can get the secret like this: 
 
 ```
 curl --location --request GET 'http://192.168.122.5:30001/api/v1/getsecret'
 ```
 
-# Response with the secret: 
+Response with the secret: 
 
 ```json
 {
@@ -322,7 +322,7 @@ curl --location --request GET 'http://192.168.122.5:30001/api/v1/getsecret'
 
 # c. Delete the container
 
-# Delete the task and remove all things about your container, such as image and volumes:
+Delete the task and remove all things about your container, such as image and volumes:
 
 ```shell 
 curl --location --request DELETE 'http://192.168.122.5:8383/sw/api/v1/container' \
@@ -332,7 +332,7 @@ curl --location --request DELETE 'http://192.168.122.5:8383/sw/api/v1/container'
 
 # d. Cancel the container task
 
-# Cancel the task when the container is in creating mode:
+Cancel the task when the container is in creating mode:
 
 ```shell
 curl --location --request POST 'http://<platformIp>:8383/sw/api/v1/container/cancel' \
