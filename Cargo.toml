@@ -1,5 +1,5 @@
 [package]
-name = "mika-rust-conker--main"
+name = "conker"
 version = "0.1.0"
 edition = "2021"
 
