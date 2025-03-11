@@ -1,0 +1,42 @@
+kind: csv-app
+app:
+  - name: conker
+    type: server
+    entrypoint: /workplace/app/conker/backend/conker.bin
+    env:
+    args: ["start"]
+csvAssistants:
+  - name: network
+    type: job
+    entrypoint: /bin/bash
+    env:
+      ifName: eth0
+      ifIp: 192.168.122.5
+      ifNetmask: 255.255.255.0
+      ifGateway: 192.168.122.1
+    args: ["/workplace/cvm-agent/cvmassistants/network-tool/network-config.sh"]
+  - name: firewall
+    type: job
+    entrypoint: python3
+    env:
+      allowPorts: 9001,8383,22
+    args: ["/workplace/cvm-agent/cvmassistants/firewall/setfirewall.py"]
+  - name: keyProvider
+    type: job
+    entrypoint: /workplace/cvm-agent/cvmassistants/keyprovider/key_provider_agent
+    env:
+      mode: local #local or kbs 
+      localKey: 00112233445566778899aabbccddeeff
+    args: []
+  - name: enryptedDisk
+    type: job
+    entrypoint: python3
+    env:
+      path: /workplace/encryptedData/   #encrypted dir
+      keyType: wrapkey 
+      disk: vda
+    args: ["/workplace/cvm-agent/cvmassistants/disktool/encryptedDisk.py"]
+  - name: restart_docker
+    type: job
+    entrypoint: bash
+    args: ["-c","service docker restart"]
