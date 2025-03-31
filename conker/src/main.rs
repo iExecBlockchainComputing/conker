@@ -1,5 +1,4 @@
 // imports
-// use backtrace::Backtrace;
 use std::process::exit;
 use std::sync::OnceLock;
 use tracing::{debug, error /*, info, trace, warn*/};
@@ -11,6 +10,12 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Layer};
 mod module_cli;
 mod module_server;
 mod module_worker;
+mod module_utils;
+mod error_codes;
+
+mod pre_compute;
+mod post_compute;
+
 
 // static
 static LOGGER_GUARD: OnceLock<tracing_appender::non_blocking::WorkerGuard> = OnceLock::new();

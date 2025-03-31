@@ -17,8 +17,10 @@ RUN apt-get update \
 #
 ARG VERSION=latest
 ARG DEBUG=false
-COPY backend /build/src
-COPY Cargo.toml /build/
+# COPY backend /build/src
+COPY conker/src /build/src
+# COPY Cargo.toml /build/
+COPY conker/Cargo.toml /build/Cargo.toml
 
 #
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \

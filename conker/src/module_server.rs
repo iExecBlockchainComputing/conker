@@ -2,12 +2,14 @@
 // import
 // ====================================
 use crate::logger_debug;
-use crate::module_worker::{self, create_task, get_task_status, Container};
-use axum::body::Body;
-use axum::extract::Request;
-use axum::http::{HeaderMap, Response};
-use axum::response::Html;
+use crate::module_worker::{self, create_task, get_task_status, AppResponse, Container};
+use axum::body::{to_bytes, Body};
+use axum::extract::{ConnectInfo, Request};
+use axum::http::{self, request, HeaderMap, Response};
+use axum::middleware::{self, Next};
+use axum::response::{self, Html};
 use axum::routing::delete;
+use axum::ServiceExt;
 use axum::{
 	http::{
 		header::{AUTHORIZATION, CONTENT_TYPE},
@@ -17,18 +19,26 @@ use axum::{
 };
 use axum::{
 	response::{IntoResponse, Json},
+  Json as JsonResponse,
 	routing::post,
 	Router,
 };
+use clap::builder::styling::Reset;
 use const_format::formatcp;
-use log::warn;
+use futures_util::future::BoxFuture;
+use log::{logger, warn};
+use openssl::bn::MsbOption;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tower::{Service, ServiceBuilder};
+use std::net::SocketAddr;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, info /*trace, warn*/};
-
+use crate::error_codes::consts;
+ 
 // ====================================
 // const
 // ====================================
@@ -36,6 +46,8 @@ const DEFAULT_ADDRESS: &'static str = "0.0.0.0:8383";
 
 const ROUTE_SW_API_V1: &'static str = "/sw/api/v1";
 const ROUTE_SW_API_V1_CONTAINER: &'static str = formatcp!("{}/container", ROUTE_SW_API_V1);
+const ROUTE_SW_API_V1_MIKA: &'static str = formatcp!("{}/mika", ROUTE_SW_API_V1);
+const ROUTE_SW_API_V1_MIKA2: &'static str = formatcp!("{}/mika2", ROUTE_SW_API_V1);
 const ROUTE_SW_API_V1_CONTAINER_CANCEL: &'static str =
 	formatcp!("{}/cancel", ROUTE_SW_API_V1_CONTAINER);
 const ROUTE_SW_API_V1_PUB: &'static str = formatcp!("{}/pub", ROUTE_SW_API_V1);
@@ -56,6 +68,19 @@ pub struct DataRes<T> {
 	#[serde(flatten)]
 	base_res: BaseRes,
 	data: Option<T>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct RequestMessageData {
+	uri: String,
+	method: String,
+
+	user: String,
+	ip: String,
+
+	response_status: u16,
+	request_body: String,
+	request_auth: String,
 }
 
 //
@@ -92,9 +117,9 @@ impl DefaultController {
 	}
 
 	// ----------------------------------------------
-	// M - DefaultController - handle_success
+	// M - DefaultController - handle_success_simple
 	// ----------------------------------------------
-	fn handle_success(&self, code: u16, message: &str) -> BaseRes {
+	fn handle_success_simple(&self, code: u16, message: &str) -> BaseRes {
 		//
 		logger_debug!("");
 
@@ -107,6 +132,101 @@ impl DefaultController {
 		//
 		base_res
 	}
+
+  // ----------------------------------------------
+	// M - DefaultController - handle_success_mika
+	// ----------------------------------------------
+  fn handle_success_normal(
+    &self,
+    code: u16,
+    message: &str,
+    addition: &str,
+    renewal: bool,
+    headers: &axum::http::HeaderMap,
+    uri: &axum::http::Uri,
+    method: &axum::http::Method,
+    request_body: &str,
+    client_ip: &str,
+    extensions: &axum::http::Extensions,
+) -> (String, BaseRes, Option<String>) {
+  //
+  logger_debug!("");
+
+  let x_real_ip = headers.get("X-Real-ip").and_then(|v: &http::HeaderValue| v.to_str().ok());
+  warn!("X-Real-ip: {:?}", x_real_ip);
+
+  let connect_info = extensions.get::<axum::extract::ConnectInfo<SocketAddr>>();
+  warn!("ConnectInfo: {:?}", connect_info);
+
+  //
+  let client_ip: String = headers
+  .get("X-Real-ip")
+  .and_then(|v| v.to_str().ok())
+  .map(|s| s.to_string())
+  .unwrap_or_else(|| {
+      headers
+          .get("X-Forwarded-For")
+          .and_then(|v| v.to_str().ok())
+          .map(|s| s.to_string())
+          .unwrap_or_else(|| {
+              extensions
+                  .get::<axum::extract::ConnectInfo<SocketAddr>>()
+                  .map(|info| info.0.ip().to_string())
+                  // .unwrap_or("unknown".to_string())
+                  .unwrap_or(client_ip.to_string())
+          })
+  });
+
+  //
+  warn!("OK Client IP: {:#?}", client_ip);
+  
+  let request_info = RequestMessageData {
+    uri: uri.to_string(),
+    method: method.to_string(),
+    user: "".to_string(),
+    ip: client_ip.to_string(),
+    request_auth: "".to_string(),
+    response_status: code,
+    request_body: request_body.to_string(),
+  };
+  
+  //
+  warn!("request_info: {:#?}", request_info);
+
+  let base_res = BaseRes {
+        code,
+        message: message.to_string(),
+    };
+
+    let new_token_opt = if renewal {
+        Some(self.new_token.clone())
+    } else {
+        None
+    };
+
+    match serde_json::to_string(&request_info) {
+        Ok(json_str) => {
+          let message = (
+            format!("message: {}; addition: {}; request: {}", message, addition, json_str),
+            base_res,
+            new_token_opt,
+        );
+
+        //
+        warn!("message OK = {:#?}", message);
+
+        message
+      }
+        Err(e) => {
+            error!("message err: {}", e);
+            (
+                format!("message: {}; addition: {}; request: {}", message, addition, e),
+                base_res,
+                new_token_opt,
+            )
+        }
+    }
+}
 
 	// ----------------------------------------------
 	// M - DefaultController - handle_success2
@@ -208,7 +328,7 @@ impl DefaultController {
 	// ----------------------------------------------
 	// M - DefaultController - handle_error_bad_request
 	// ----------------------------------------------
-	fn handle_error_bad_request(&self, code: u16, message: &str) -> BaseRes {
+	fn handle_error_bad_request_simple(&self, code: u16, message: &str) -> BaseRes {
 		//
 		logger_debug!("");
 
@@ -220,6 +340,74 @@ impl DefaultController {
 		//
 		base_res
 	}
+
+	// ----------------------------------------------
+	// M - DefaultController - handle_error_status_bad_request_mika
+	// ----------------------------------------------
+  async fn handle_error_status_bad_request(&self, 
+    code: u16, 
+    message: &str, 
+    addition: &str, 
+    headers: &http::HeaderMap, 
+    uri: &http::Uri, 
+    method: &http::Method,
+    client_ip: &str,
+    extensions: &axum::http::Extensions,
+  ) -> String {
+  
+  //
+  logger_debug!("");
+
+  //
+  let connect_info = extensions.get::<axum::extract::ConnectInfo<SocketAddr>>();
+  warn!("ConnectInfo: {:?}", connect_info);
+
+  //
+  let client_ip: String = headers
+  .get("X-Real-ip")
+  .and_then(|v| v.to_str().ok())
+  .map(|s| s.to_string())
+  .unwrap_or_else(|| {
+      headers
+          .get("X-Forwarded-For")
+          .and_then(|v| v.to_str().ok())
+          .map(|s| s.to_string())
+          .unwrap_or_else(|| {
+              extensions
+                  .get::<axum::extract::ConnectInfo<SocketAddr>>()
+                  .map(|info| info.0.ip().to_string())
+                  // .unwrap_or("unknown".to_string())
+                  .unwrap_or(client_ip.to_string())
+          })
+  });
+
+  //
+  warn!("BAD req - Client IP: {:#?}", client_ip);
+
+    let request_info = RequestMessageData {
+      uri: uri.to_string(),
+      method: method.to_string(),
+      user: "".to_string(),
+      ip: client_ip.to_string(),
+      response_status: code,
+      request_body: "".to_string(),
+      request_auth: "".to_string(),
+    };
+
+    //
+    match serde_json::to_string(&request_info) {
+      // OK
+      Ok(json_str) => {
+        format!("message: {}; addition: {}; request: {}", message, addition, json_str)
+      }
+      // ERR
+      Err(e) => {
+        error!("Failed to serialize request info: {}", e);
+        format!("message: {}; addition: {}; request: {}", message, addition, e)
+      }
+    }
+
+    }
 
 	// ----------------------------------------------
 	// M - DefaultController - handle_error_bad_request2
@@ -241,7 +429,7 @@ impl DefaultController {
 		let user = req.headers().get("Authorization").map(|h| h.to_str().unwrap_or("")).unwrap_or(""); // User example
 		let client_ip = client_ip; // Using the IP given
 
-		// Craating the RequestMessageData struct
+		// Creating the RequestMessageData struct
 		let request_info = json!({
 				"URI": uri,
 				"Method": method,
@@ -282,7 +470,36 @@ impl DefaultController {
 }
 
 // ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
 // impl - ContainerController
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
+// ----------------------------------------------
 // ----------------------------------------------
 impl ContainerController {
 	// ----------------------------------------------
@@ -298,6 +515,206 @@ impl ContainerController {
 			default_controller: DefaultController::new(new_token),
 		}
 	}
+
+	// ----------------------------------------------
+	// M - ContainerController - create_mika
+	// ----------------------------------------------
+    async fn create_container(
+      &self,
+      req: Request<Body>,
+  ) -> impl axum::response::IntoResponse {
+		//
+		logger_debug!("");
+   
+    //
+    let ConnectInfo(addr) = req.extensions().get::<ConnectInfo<SocketAddr>>()
+        .expect("ConnectInfo should be present");
+    debug!("Client IP : {}", addr.ip());
+
+		//
+		let response = self.process_payload_container(req).await;
+
+    //
+    response
+	}
+
+	// ----------------------------------------------
+	// M - ContainerController - process_payload_mika
+	// ----------------------------------------------
+	async fn process_payload_container(&self, req: Request<Body>) -> impl IntoResponse {
+		//
+		logger_debug!("");
+
+    //
+    let (parts, body) = req.into_parts();
+
+    let headers = parts.headers.clone();
+    let uri = parts.uri.clone();
+    let method = parts.method.clone();
+    let extensions = axum::http::Extensions::new();
+    
+    let ConnectInfo(addr) = parts.extensions.get::<ConnectInfo<SocketAddr>>()
+    .expect("ConnectInfo should be present");
+
+
+    //
+    debug!("Client IP: {}", addr.ip());
+
+    // body_bytes
+    let body_bytes = match to_bytes(body, usize::MAX).await {
+      // OK
+      Ok(bytes) => {
+        bytes
+      }
+      // ERR
+      Err(e) => {
+        let message = format!("Failed to read request body: {}", e);
+        let err_mes = self.default_controller.handle_error_status_bad_request(
+            consts::ERROR_CODE__JSON__UNMARSHAL_FAILED,
+            &message,
+            "",
+            &headers,
+            &uri,
+            &method,
+            &addr.ip().to_string(),
+            &extensions,
+        ).await;
+        error!("{}", err_mes);
+        return (
+          HeaderMap::new(),
+                    JsonResponse(DataRes {
+                        base_res: BaseRes {
+                            code: consts::ERROR_CODE__JSON__UNMARSHAL_FAILED,
+                            message: err_mes,
+                        },
+                        data: None,
+                    }),
+                );
+    }
+    };
+
+    // serde_json::from_slice
+    let container = match serde_json::from_slice::<Container>(&body_bytes) { // deserialize the JSON file into a Container
+      // OK
+      Ok(container) => {
+        info!("Container deserialized: {:?}", container);
+        container
+      }
+      // ERR
+      Err(e) => {
+        //
+        let message = format!("get body error: {}", e);
+        let err_mes = self.default_controller.handle_error_status_bad_request(
+            consts::ERROR_CREATE_CONTAINER_FAILED,
+            &message,
+            "",
+            &headers,
+            &uri,
+            &method,
+            &addr.ip().to_string(),
+            &extensions,
+        ).await;
+        error!("{}", err_mes);
+        return (
+          HeaderMap::new(),
+          JsonResponse(DataRes {
+              base_res: BaseRes {
+                  code: consts::ERROR_CREATE_CONTAINER_FAILED,
+                  message: err_mes,
+              },
+              data: None,
+          }),
+        );
+      }
+    };
+
+    //
+    let raw_app_response = match create_task(container).await {
+      // OK
+      Ok(response) => {
+        response
+      }
+      // ERR
+      Err(e) => {
+        //
+        let app_response = AppResponse {
+          exit_cause: "".to_string(),
+          stdout: "".to_string(),
+          stderr: e.to_string(),
+          exit_code: -1,
+        };
+      
+      //
+      let app_response_json = serde_json::to_string(&app_response)
+        .unwrap_or_else(|_| "Failed to serialize response".to_string());
+      let message = format!("create container failed, error: {}, logs: \n{}", e, app_response_json);
+
+      //
+      error!("original message: {}", message);
+
+      let err_mes = self.default_controller.handle_error_status_bad_request(
+        consts::ERROR_CREATE_CONTAINER_FAILED,
+        &message,
+        "",
+        &headers,
+        &uri,
+        &method,
+        &addr.ip().to_string(),
+        &extensions,
+      ).await;
+
+      error!("{}", err_mes);
+      return (
+      HeaderMap::new(),
+                    JsonResponse(DataRes {
+                        base_res: BaseRes {
+                            code: consts::ERROR_CREATE_CONTAINER_FAILED,
+                            message: err_mes,
+                        },
+                        data: None,
+                    }),
+                  );
+
+      } // End ERR
+
+
+    };
+
+
+    // success
+    let body_str = String::from_utf8_lossy(&body_bytes).to_string();
+    let app_response_json = serde_json::to_string(&raw_app_response)
+      .unwrap_or_else(|_| "Failed to serialize response".to_string());
+
+    let renewal = true;
+    let (mesg, base_res, new_token_opt) = self.default_controller.handle_success_normal(
+      200,
+      &app_response_json,
+      "",
+      renewal,
+      &headers,
+      &uri,
+      &method,
+      &body_str,
+      &addr.ip().to_string(),
+      &extensions,
+    );
+    let res: DataRes<AppResponse> = DataRes { 
+      base_res,
+      data: None
+    };
+    info!("{}", mesg);
+
+
+      //
+      let mut response_headers = HeaderMap::new();
+      if let Some(token) = new_token_opt {
+          response_headers.insert("NewToken", token.parse().unwrap());
+      }
+      (response_headers, JsonResponse(res))
+
+
+			}
 
 	// ----------------------------------------------
 	// M - ContainerController - get_container
@@ -379,128 +796,10 @@ impl ContainerController {
 		logger_debug!("");
 
 		//
-		let base_res = self.default_controller.handle_success(200, "Server is healthy.");
+		let base_res = self.default_controller.handle_success_simple(200, "Server is healthy.");
 
 		//
 		Json(base_res)
-	}
-
-	// ----------------------------------------------
-	// M - ContainerController - create_container
-	// ----------------------------------------------
-	async fn create_container(
-		&self,
-		payload: Result<Json<Container>, axum::extract::rejection::JsonRejection>,
-	) -> impl IntoResponse {
-		//
-		logger_debug!("");
-
-		info!("Before");
-		info!("payload = {:?}", payload);
-		info!("After");
-
-		// Response to client
-		self.process_payload(payload).await
-	}
-
-	// ----------------------------------------------
-	// M - ContainerController - process_payload
-	// ----------------------------------------------
-	async fn process_payload(
-		&self,
-		payload: Result<Json<Container>, axum::extract::rejection::JsonRejection>,
-	) -> impl IntoResponse {
-		//
-		logger_debug!("");
-
-		//
-		match payload {
-			// OK deserialization
-			Ok(payload_ok) => {
-				// payload_ok.0 = container filled with JSON data deserialized.
-				if payload_ok.0.name.is_empty() {
-					let base_res = self.default_controller.handle_success(
-						StatusCode::BAD_REQUEST.as_u16(),
-						"Container creation FAILED. Name is empty.",
-					);
-					return Json(base_res);
-				}
-
-				//
-				debug!("Payload successfully deserialized:");
-				debug!("payload.0 = {:?}", payload_ok.0);
-
-				//
-				let container = payload_ok.0;
-
-				// Let's work with the Docker container now and create the Task
-				if let Err(err) = create_task(container).await {
-					error!("err = {:?}", err);
-					let base_res = self.default_controller.handle_error_bad_request(
-						StatusCode::BAD_REQUEST.as_u16(),
-						"Failed to create container task.",
-					);
-					return Json(base_res);
-				}
-
-				// Send response to the client.
-				let base_res =
-					self.default_controller.handle_success(StatusCode::OK.as_u16(), "Creating_container OK.");
-
-				//
-				Json(base_res)
-			}
-
-			// ERROR deserialization
-			Err(err) => {
-				info!("Failed to deserialize:");
-
-				//
-				let error_message = self.handle_json_rejection(&err);
-
-				//
-				let deserialization_error_message = format!("{:?}", err);
-				let final_error_message =
-					format!("ERROR Invalid JSON File: {} - {}", error_message, deserialization_error_message);
-
-				//
-				let base_res = self
-					.default_controller
-					.handle_success(StatusCode::BAD_REQUEST.as_u16(), &final_error_message);
-
-				Json(base_res)
-			}
-		}
-	}
-
-	// ---------------------------------------------------
-	// M - ContainerController - handle_json_rejection
-	// ---------------------------------------------------
-	fn handle_json_rejection(&self, err: &axum::extract::rejection::JsonRejection) -> String {
-		match err {
-			// Missing content type error
-			axum::extract::rejection::JsonRejection::MissingJsonContentType(field, ..) => {
-				format!("Missing content type (field): {}", field)
-			}
-
-			// Syntax error in the JSON
-			axum::extract::rejection::JsonRejection::JsonSyntaxError(e) => {
-				format!("Syntax error: {}", e)
-			}
-
-			// Data error during deserialization
-			axum::extract::rejection::JsonRejection::JsonDataError(e) => {
-				format!("Data error: {}", e)
-			}
-
-			// Bytes rejection
-			axum::extract::rejection::JsonRejection::BytesRejection(e) => {
-				format!("Bytes rejection: {}", e)
-			}
-
-			// Unknown error
-			_ => "Unknown error".to_string(),
-		}
 	}
 
 	// ---------------------------------------------------
@@ -515,7 +814,7 @@ impl ContainerController {
 			//
 			Ok(_) => {
 				//
-				let base_res = self.default_controller.handle_success(200, "DELETING container OK.");
+				let base_res = self.default_controller.handle_success_simple(200, "DELETING container OK.");
 
 				Json(base_res)
 			}
@@ -529,7 +828,7 @@ impl ContainerController {
 				let err_message = format!("{}{}", err_message_default, err).to_string();
 
 				//
-				let base_res = self.default_controller.handle_error_bad_request(400, &err_message);
+				let base_res = self.default_controller.handle_error_bad_request_simple(400, &err_message);
 
 				Json(base_res)
 			}
@@ -553,7 +852,7 @@ impl ContainerController {
 			//
 			Ok(_) => {
 				//
-				let base_res = self.default_controller.handle_success(200, "CANCELING task OK.");
+				let base_res = self.default_controller.handle_success_simple(200, "CANCELING task OK.");
 
 				Json(base_res)
 			}
@@ -566,12 +865,13 @@ impl ContainerController {
 				let err_message = format!("{}{}", err_message_default, err).to_string();
 
 				//
-				let base_res = self.default_controller.handle_error_bad_request(400, &err_message);
+				let base_res = self.default_controller.handle_error_bad_request_simple(400, &err_message);
 
 				Json(base_res)
 			}
 		}
 	}
+  
 }
 
 // ----------------------------------------------
@@ -608,8 +908,18 @@ pub async fn manager_server(result: Result<&'static str, &'static str>) -> Resul
 				// Message.
 				println!("Listening on {}", listener.local_addr().unwrap());
 
-				//
-				axum::serve(listener, router).await.unwrap();
+
+
+
+
+				// //
+				axum::serve(
+          listener,
+          router.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .unwrap();
+
 			} else if answer == "exit" {
 			} else {
 			}
@@ -624,6 +934,7 @@ pub async fn manager_server(result: Result<&'static str, &'static str>) -> Resul
 	//
 	Ok(&str)
 }
+
 
 // ---------------------------------------------------
 // routing_init
@@ -674,7 +985,6 @@ async fn routing_init() -> Router {
 		.route(ROUTE_SW_API_V1_CONTAINER, {
 			let controller = container_controller.clone();
 			get(move |req: Request<Body>| async move {
-				// let headers = req.headers().clone();
 				controller.get_container(req).await
 			})
 		})
