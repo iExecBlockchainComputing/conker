@@ -87,7 +87,7 @@ curl --location --request POST 'http://192.168.122.5:8383/sw/api/v1/container' \
     "ImageInfo": {
         "ImageName": "reckey/conker-example-app:latest",
         "RegisterAuthInfo": {
-            "UserName": "",
+            "Username": "",
             "Password": ""
         },
         "Cmd": "cmd",
@@ -221,7 +221,7 @@ curl --location --request GET 'http://192.168.122.5:8383/sw/api/v1/container' \
             },
             {
                 "Action": "Attested",
-                "Message": "do remote attestimg successful",
+                "Message": "do remote attesting successful",
                 "Time": "2024-05-07T11:11:59.988890026+08:00"
             },
             {
