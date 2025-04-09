@@ -4,7 +4,7 @@
 DIR="$(dirname "$0")"
 
 #
-PORT="${1:-1337}"
+PORT="8383"
 
 #
 echo "Starting tests..."
