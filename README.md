@@ -1,3 +1,34 @@
+# Conker: Confidential Docker Engine for TDX
+
+> ⚠️ **Disclaimer**  
+> This project is a **prototype/alpha version** and has **not been audited for security**.  
+> It is intended for **research and experimentation only** and **must not be used in production**.  
+> Use at your own risk.
+
+## Overview
+
+**Conker** is a Confidential Docker Engine designed to run containers inside Intel TDX-based Confidential Virtual Machines (CVMs). It aims to bring containerized workloads into trusted execution environments with minimal changes to existing workflows.
+
+This repository includes:
+- A custom container runtime interface for CVMs
+- TDX-specific logic to manage measurements and secrets
+- Integration hooks for the confidential base image (e.g., `cvm-base:latest`)
+
+## Features
+
+- Launch containers in a TDX-backed CVM
+- Support for injecting secrets via confidential channels
+
+## Getting Started
+
+### Requirements
+
+- Intel TDX-enabled host with KVM support
+- QEMU with TDX support
+- `cvm-base:latest` image built and available locally (see [conker-base repo](https://github.com/iExecBlockchainComputing/conker-base))
+
+### Build
+
 ## 1. Set up Conker
 
 ```bash
