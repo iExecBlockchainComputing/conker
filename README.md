@@ -109,7 +109,7 @@ After running the server, get the server's endpoint called `kmsendpoint` as belo
 
 # Create a task for the container with this config:
 
-```bash
+```shell
 curl --location --request POST 'http://192.168.122.5:8383/sw/api/v1/container' \
 --header 'Authorization: ' \
 --header 'Content-Type: application/json' \
@@ -120,7 +120,9 @@ curl --location --request POST 'http://192.168.122.5:8383/sw/api/v1/container' \
         "RegisterAuthInfo": {
             "Username": "",
             "Password": ""
-        }
+        },
+        "Cmd": "cmd",
+        "MaxExecutionTime": "300"
     },
     "Ports": [
         {
@@ -147,7 +149,9 @@ curl --location --request POST 'http://192.168.122.5:8383/sw/api/v1/container' \
     ],
     "KmsEndpoints": [
         "145.239.161.248:3333"
-    ]
+    ],
+    "SessionId": "000000000000000000000",
+    "WorkerHost" "145.239.161.248"
 }'
 ```
 
@@ -159,6 +163,8 @@ In the Container create config:
 `Env` is a set of environment variables;
 `Mounts` is a set of Docker volumes (Warning: the volumes are encrypted and will be deleted when the container is deleted);
 `KmsEndpoints` is the endpoint of the secret broker server. 
+`SessionId` is the session ID sent by the SMS to the SPS. This is necessary to get proper environment variables of the execution (unused in this example).
+`WorkerHost` is the IP address of the worker. This is necessary to send results to worker in post-compute(unused in this example).
 
 The conker-example-app is a test server with a restful API to get the secret. 
 The platform will do remote attestation from the kmsEndpoints and save the JSON secret as a file named `secret-<kmsEndpoints>.json` in the `/secret` directory.
@@ -222,7 +228,9 @@ curl --location --request GET 'http://192.168.122.5:8383/sw/api/v1/container' \
             ],
             "KmsEndpoints": [
                 "10.10.11.109:3333"
-            ]
+            ],
+            "SessionId": "000000000000000000000",
+            "WorkerHost" "145.239.161.248"
         },
         "Status": "Running",
         "IsCancel": false,

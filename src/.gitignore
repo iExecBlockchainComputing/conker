@@ -1,6 +1,0 @@
-logs/
-*.log.*
-target/
-.vscode/
-task.json
-Cargo.lock
