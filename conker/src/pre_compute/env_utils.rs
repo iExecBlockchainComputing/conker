@@ -1,4 +1,3 @@
-pub const IEXEC_TASK_ID: &str = "IEXEC_TASK_ID";
 pub const IEXEC_PRE_COMPUTE_OUT: &str = "IEXEC_PRE_COMPUTE_OUT";
 pub const IS_DATASET_REQUIRED: &str = "IS_DATASET_REQUIRED";
 pub const IEXEC_DATASET_URL: &str = "IEXEC_DATASET_URL";
