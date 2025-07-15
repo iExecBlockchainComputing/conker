@@ -41,7 +41,6 @@ backtrace = "0.3"
 
 [dev-dependencies]
 test-log = "0.2.12"
-testcontainers = "0.10.0"
 rstest = "0.23.0"
 
 [features]
