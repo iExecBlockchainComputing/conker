@@ -124,7 +124,7 @@ impl PreComputeArgs {
 
 #[cfg(test)]
 mod tests {
-    use crate::pre_compute::env_utils::{IEXEC_INPUT_FILES_NUMBER, IEXEC_TASK_ID, IS_DATASET_REQUIRED};
+    use crate::pre_compute::env_utils::{IEXEC_INPUT_FILES_NUMBER, IS_DATASET_REQUIRED};
     use crate::pre_compute::pre_compute_args::PreComputeArgs;
     use crate::pre_compute::replicate_status_cause::ReplicateStatusCause::PreComputeFailedUnknownIssue;
     use rstest::rstest;
@@ -137,7 +137,7 @@ mod tests {
     // region get_env_var
     #[test]
     fn should_get_env_var() {
-        let env_var = IEXEC_TASK_ID;
+        let env_var = "IEXEC_TASK_ID";
         clear_env_var(env_var);
 
         let task_id = "0x01".to_string();
@@ -159,7 +159,7 @@ mod tests {
 
     #[test]
     fn should_not_get_env_var_because_does_not_exist() {
-        let env_var = IEXEC_TASK_ID;
+        let env_var = "IEXEC_TASK_ID";
         clear_env_var(env_var);
 
         let expected_error = PreComputeFailedUnknownIssue;
