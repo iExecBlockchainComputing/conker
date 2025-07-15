@@ -1,9 +1,6 @@
 use serde::Serialize;
 use std::fmt::{Display, Formatter};
 
-use crate::logger_debug;
-use tracing::{debug, error, /*event,*/ info /*, trace, warn*/};
-
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[allow(clippy::enum_variant_names)]
@@ -27,9 +24,6 @@ pub enum ReplicateStatusCause {
 
 impl Display for ReplicateStatusCause {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-      //
-      logger_debug!("");
-
         write!(f, "{:?}", self)
     }
 }

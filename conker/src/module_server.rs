@@ -1,15 +1,14 @@
 // ====================================
 // import
 // ====================================
+use crate::error_codes::consts;
 use crate::logger_debug;
 use crate::module_worker::{self, create_task, get_task_status, AppResponse, Container};
 use axum::body::{to_bytes, Body};
 use axum::extract::{ConnectInfo, Request};
-use axum::http::{self, request, HeaderMap, Response};
-use axum::middleware::{self, Next};
-use axum::response::{self, Html};
+use axum::http::{self, HeaderMap, Response};
+use axum::response::Html;
 use axum::routing::delete;
-use axum::ServiceExt;
 use axum::{
 	http::{
 		header::{AUTHORIZATION, CONTENT_TYPE},
@@ -23,21 +22,14 @@ use axum::{
 	routing::post,
 	Router,
 };
-use clap::builder::styling::Reset;
 use const_format::formatcp;
-use futures_util::future::BoxFuture;
-use log::{logger, warn};
-use openssl::bn::MsbOption;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tower::{Service, ServiceBuilder};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::{debug, error, info /*trace, warn*/};
-use crate::error_codes::consts;
+use tracing::{debug, error, info, warn};
  
 // ====================================
 // const
@@ -46,8 +38,6 @@ const DEFAULT_ADDRESS: &'static str = "0.0.0.0:8383";
 
 const ROUTE_SW_API_V1: &'static str = "/sw/api/v1";
 const ROUTE_SW_API_V1_CONTAINER: &'static str = formatcp!("{}/container", ROUTE_SW_API_V1);
-const ROUTE_SW_API_V1_MIKA: &'static str = formatcp!("{}/mika", ROUTE_SW_API_V1);
-const ROUTE_SW_API_V1_MIKA2: &'static str = formatcp!("{}/mika2", ROUTE_SW_API_V1);
 const ROUTE_SW_API_V1_CONTAINER_CANCEL: &'static str =
 	formatcp!("{}/cancel", ROUTE_SW_API_V1_CONTAINER);
 const ROUTE_SW_API_V1_PUB: &'static str = formatcp!("{}/pub", ROUTE_SW_API_V1);

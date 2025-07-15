@@ -1,7 +1,7 @@
 // imports
 use std::process::exit;
 use std::sync::OnceLock;
-use tracing::{debug, error /*, info, trace, warn*/};
+use tracing::{debug, error};
 use tracing_appender::rolling;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Layer};

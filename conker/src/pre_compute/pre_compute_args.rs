@@ -1,15 +1,9 @@
+use crate::pre_compute::env_utils::*;
+use crate::pre_compute::replicate_status_cause::ReplicateStatusCause::{self, *};
 use derive_getters::Getters;
 use log::error;
 use std::env;
 use std::str::FromStr;
-
-use crate::pre_compute::env_utils::*;
-use crate::pre_compute::replicate_status_cause::ReplicateStatusCause;
-use crate::pre_compute::replicate_status_cause::ReplicateStatusCause::*;
-
-use crate::logger_debug;
-use tracing::{debug, /* error,event,*/ info /*, trace, warn*/};
-
 
 #[derive(Getters, Debug)]
 pub struct PreComputeArgs {
@@ -25,9 +19,6 @@ pub struct PreComputeArgs {
 
 impl PreComputeArgs {
     pub fn read_args(chain_task_id: &str) -> Result<PreComputeArgs, ReplicateStatusCause> {
-      //
-      logger_debug!("");
-
         let pre_compute_out = match PreComputeArgs::get_env_var(IEXEC_PRE_COMPUTE_OUT) {
             Ok(value) => value,
             Err(_) => return Err(PreComputeOutputPathMissing),
@@ -89,9 +80,6 @@ impl PreComputeArgs {
     }
 
     pub fn get_env_var(env_var_name: &str) -> Result<String, ReplicateStatusCause> {
-            //
-            logger_debug!("");
-
         match env::var(env_var_name) {
             Ok(value) => Ok(value),
             Err(_) => {
@@ -102,9 +90,6 @@ impl PreComputeArgs {
     }
 
     fn get_boolean_env_var(env_var_name: &str) -> Result<bool, ReplicateStatusCause> {
-            //
-            logger_debug!("");
-
         let value: String = PreComputeArgs::get_env_var(env_var_name)?;
 
         match FromStr::from_str(&value.to_lowercase()) {
@@ -121,9 +106,6 @@ impl PreComputeArgs {
     }
 
     fn get_int_env_var(env_var_name: &str) -> Result<usize, ReplicateStatusCause> {
-            //
-            logger_debug!("");
-
         let value: String = PreComputeArgs::get_env_var(env_var_name)?;
 
         match FromStr::from_str(&value) {
