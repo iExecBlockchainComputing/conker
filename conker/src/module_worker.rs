@@ -1,10 +1,10 @@
 // ====================================
 // import
 // ====================================
-use crate::{logger_debug, post_compute, pre_compute};
+use crate::{logger_debug, module_utils::util, post_compute, pre_compute};
 use base64::{engine::general_purpose::URL_SAFE, Engine};
 use bollard::container::{
-	/*CreateContainerOptions, */ Config, CreateContainerOptions, InspectContainerOptions,
+	Config, CreateContainerOptions, InspectContainerOptions,
 	LogOutput, LogsOptions, RemoveContainerOptions, WaitContainerOptions,
 };
 use bollard::image::{CreateImageOptions, PruneImagesOptions, RemoveImageOptions};
@@ -17,16 +17,15 @@ use bollard::volume::PruneVolumesOptions;
 use bollard::{models::ContainerInspectResponse, Docker};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
+use futures_util::stream::StreamExt;
 use lazy_static::lazy_static;
-use log::{logger, warn};
+use log::warn;
 use serde::{Deserialize, Serialize};
-use serde_json::{self /*, error*/};
+use serde_json::{self};
 use tokio::fs::OpenOptions;
 use std::collections::HashMap;
-use std::fmt::format;
 use std::fs::{self};
 use std::io::Write;
-use std::io::{self};
 use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 use std::sync::Arc;
@@ -35,11 +34,6 @@ use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tracing::{debug, error, /*event,*/ info /*, trace, warn*/};
 use uuid::Uuid;
-
-use futures_util::stream::{StreamExt, TryStreamExt};
-
-// crate
-use crate::module_utils::util;
 
 // ====================================
 // const
@@ -1865,14 +1859,6 @@ pub async fn cancel_inter_task() -> Result<(), String> {
 
 		}
 	}
-
-	info!("- - - - 9");
-
-	//
-	info!("Cancellation process completed.");
-
-	//
-	Ok(())
 }
 
 // ---------------------------------------------------

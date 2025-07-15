@@ -1,3 +1,4 @@
+use crate::logger_debug;
 use crate::pre_compute::multiaddress_helper::IPFS_GATEWAYS;
 use crate::pre_compute::pre_compute_args::PreComputeArgs;
 use crate::pre_compute::replicate_status_cause::ReplicateStatusCause;
@@ -15,10 +16,6 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::ops::Deref;
-
-use crate::logger_debug;
-use tracing::{/*debug, error, event, info , trace, warn*/};
-
 
 pub async fn run(chain_task_id: &str) -> Result<(), ReplicateStatusCause> {
   //
