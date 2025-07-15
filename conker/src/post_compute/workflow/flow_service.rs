@@ -1,9 +1,3 @@
-use std::fs;
-
-use log::{error, info};
-use tracing::{debug, /*error, event, info , trace, warn*/};
-use crate::{logger_debug};
-
 use crate::post_compute::computed_file::ComputedFile;
 use crate::post_compute::replicate_status_cause::ReplicateStatusCause;
 use crate::post_compute::replicate_status_cause::ReplicateStatusCause::{
@@ -18,9 +12,10 @@ use crate::post_compute::utils::post_compute_args::get_env_var;
 use crate::post_compute::utils::{hash_utils, result_utils};
 use crate::post_compute::worker_api::worker_api_client;
 
-pub fn read_computed_file(task_id: &str) -> Result<ComputedFile, ReplicateStatusCause> {
-    logger_debug!("");
+use std::fs;
+use tracing::{error, info};
 
+pub fn read_computed_file(task_id: &str) -> Result<ComputedFile, ReplicateStatusCause> {
     info!("ReadComputedFile stage started");
 
     let path = "/iexec_out/computed.json";

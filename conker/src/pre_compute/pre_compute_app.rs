@@ -1,4 +1,3 @@
-use crate::logger_debug;
 use crate::pre_compute::multiaddress_helper::IPFS_GATEWAYS;
 use crate::pre_compute::pre_compute_args::PreComputeArgs;
 use crate::pre_compute::replicate_status_cause::ReplicateStatusCause;
@@ -18,22 +17,9 @@ use std::io::Write;
 use std::ops::Deref;
 
 pub async fn run(chain_task_id: &str) -> Result<(), ReplicateStatusCause> {
-  //
-  logger_debug!("");
-
-    println!("======================================");
-    println!("pre_compute > pre_compute_app.rs > run()");
-    println!("======================================");
-
     let args = PreComputeArgs::read_args(chain_task_id)?;
-    //
-    debug!("args 1 = {:#?}", args);
     
     check_output_folder(&args)?;
-    
-    //
-    debug!("args 2 = {:#?}", args);
-    
     
     if *args.is_dataset_required() {
       let chain_task_id = args.chain_task_id();
@@ -49,16 +35,10 @@ pub async fn run(chain_task_id: &str) -> Result<(), ReplicateStatusCause> {
       save_plain_dataset_file(chain_task_id, output_dir, dataset_filename, &plain_content)?;
     }
     
-    //
-    debug!("args 3 = {:#?}", args);
-    
     download_input_files(&args)
 }
 
 fn check_output_folder(args: &PreComputeArgs) -> Result<(), ReplicateStatusCause> {
-  //
-  logger_debug!("");
-
     let chain_task_id = args.chain_task_id();
     let output_dir = args.pre_compute_out();
     info!(
@@ -94,9 +74,7 @@ fn download_encrypted_dataset(
     encrypted_dataset_url: &str,
     expected_checksum: &str,
 ) -> Result<Vec<u8>, ReplicateStatusCause> {
-//
-logger_debug!("");
-  info!(
+    info!(
         "Downloading encrypted dataset file [chainTaskId:{}, url:{}]",
         chain_task_id, encrypted_dataset_url
     );
@@ -149,9 +127,6 @@ fn download_from_ipfs(
     client: &Client,
     encrypted_dataset_url: &str,
 ) -> Result<Vec<u8>, ()> {
-  //
-  logger_debug!("");
-
     for ipfs_gateway in IPFS_GATEWAYS {
         debug!(
             "Try to download dataset from {} [chainTaskId:{}]",
@@ -173,10 +148,7 @@ fn decrypt_dataset(
     encrypted_file_content: Vec<u8>,
     encrypted_dataset_base64_key: &str,
 ) -> Result<Vec<u8>, ReplicateStatusCause> {
-    //
-  logger_debug!("");
-  
-  info!("Decrypting dataset [chainTaskId:{}]", chain_task_id);
+    info!("Decrypting dataset [chainTaskId:{}]", chain_task_id);
 
     let key = match base64::engine::general_purpose::STANDARD.decode(encrypted_dataset_base64_key) {
         Ok(key) => key,
@@ -209,9 +181,6 @@ fn save_plain_dataset_file(
     plain_dataset_filename: &str,
     plain_content: &[u8],
 ) -> Result<(), ReplicateStatusCause> {
-    //
-  logger_debug!("");
-    
     let file_path = &format!("{}/{}", output_dir, plain_dataset_filename);
     info!(
         "Saving plain dataset file [chainTaskId:{}, path:{}]",
@@ -239,9 +208,6 @@ fn save_plain_dataset_file(
 
 // region Input files
 fn download_input_files(args: &PreComputeArgs) -> Result<(), ReplicateStatusCause> {
-  //
-  logger_debug!("");
-
     let chain_task_id = args.chain_task_id();
     let pre_compute_out = args.pre_compute_out();
 
@@ -269,9 +235,6 @@ fn download_input_file(
     input_file_url: &str,
     output_dir: &str,
 ) -> Result<(), ReplicateStatusCause> {
-  //
-  logger_debug!("");
-
     info!(
         "Downloading input file [chainTaskId:{}, url:{}]",
         chain_task_id, input_file_url
@@ -301,9 +264,6 @@ fn download_input_file(
 
 // region utils
 fn build_client() -> Result<Client, ()> {
-  //
-  logger_debug!("");
-
     match Client::builder().use_rustls_tls().build() {
         Ok(client) => Ok(client),
         Err(_) => {
@@ -318,9 +278,6 @@ fn download_file(
     client: &Client,
     file_url: &str,
 ) -> Result<(String, Vec<u8>), ()> {
-  //
-  logger_debug!("");
-
     let request = match client.get(file_url).build() {
         Ok(request) => request,
         Err(e) => {
@@ -361,9 +318,6 @@ fn download_file(
 }
 
 fn get_filename(response: &Response) -> String {
-  //
-  logger_debug!("");
-
     String::from(
         response
             .url()
@@ -375,9 +329,6 @@ fn get_filename(response: &Response) -> String {
 }
 
 fn write_file(chain_task_id: &str, file_path: &str, file_content: &[u8]) -> Result<(), ()> {
-  //
-  logger_debug!("");
-
     let mut file = match File::create(file_path) {
         Ok(file) => file,
         Err(_) => {
