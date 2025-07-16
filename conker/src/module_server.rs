@@ -1,8 +1,4 @@
-// ====================================
-// import
-// ====================================
 use crate::error_codes::consts;
-use crate::logger_debug;
 use crate::module_worker::{self, create_task, get_task_status, AppResponse, Container};
 use axum::body::{to_bytes, Body};
 use axum::extract::{ConnectInfo, Request};
@@ -73,12 +69,10 @@ struct RequestMessageData {
 	request_auth: String,
 }
 
-//
 struct DefaultController {
 	new_token: String,
 }
 
-//
 struct ContainerController {
 	state: Arc<Mutex<AppState>>,
 	default_controller: DefaultController,
@@ -97,10 +91,6 @@ impl DefaultController {
 	// M - new
 	// ----------------------------------------------
 	fn new(new_token: String) -> Self {
-		//
-		logger_debug!("");
-
-		//
 		DefaultController {
 			new_token: new_token,
 		}
@@ -110,17 +100,11 @@ impl DefaultController {
 	// M - DefaultController - handle_success_simple
 	// ----------------------------------------------
 	fn handle_success_simple(&self, code: u16, message: &str) -> BaseRes {
-		//
-		logger_debug!("");
-
-		//
-		let base_res = BaseRes {
+		debug!("handle_success_simple");
+		BaseRes {
 			code,
 			message: message.to_string(),
-		};
-
-		//
-		base_res
+		}
 	}
 
   // ----------------------------------------------
@@ -139,8 +123,7 @@ impl DefaultController {
     client_ip: &str,
     extensions: &axum::http::Extensions,
 ) -> (String, BaseRes, Option<String>) {
-  //
-  logger_debug!("");
+  debug!("handle_success_normal");
 
   let x_real_ip = headers.get("X-Real-ip").and_then(|v: &http::HeaderValue| v.to_str().ok());
   warn!("X-Real-ip: {:?}", x_real_ip);
@@ -148,7 +131,6 @@ impl DefaultController {
   let connect_info = extensions.get::<axum::extract::ConnectInfo<SocketAddr>>();
   warn!("ConnectInfo: {:?}", connect_info);
 
-  //
   let client_ip: String = headers
   .get("X-Real-ip")
   .and_then(|v| v.to_str().ok())
@@ -167,7 +149,6 @@ impl DefaultController {
           })
   });
 
-  //
   warn!("OK Client IP: {:#?}", client_ip);
   
   let request_info = RequestMessageData {
@@ -180,7 +161,6 @@ impl DefaultController {
     request_body: request_body.to_string(),
   };
   
-  //
   warn!("request_info: {:#?}", request_info);
 
   let base_res = BaseRes {
@@ -202,7 +182,6 @@ impl DefaultController {
             new_token_opt,
         );
 
-        //
         warn!("message OK = {:#?}", message);
 
         message
@@ -231,19 +210,15 @@ impl DefaultController {
 		client_ip: Option<String>,
 		task: &module_worker::Task,
 	) -> Result<Response<Body>, String> {
-		//
-		logger_debug!("");
+		debug!("handle_success2");
 
-		//
 		let client_ip = client_ip.unwrap_or_else(|| "Unknown IP".to_string());
 
-		//
 		let uri = req.uri().to_string();
 		let method = req.method().to_string();
 		let user = req.headers().get("Authorization").map(|h| h.to_str().unwrap_or("")).unwrap_or("");
 		let client_ip = client_ip;
 
-		//
 		let request_info = json!({
 				"URI": uri,
 				"Method": method,
@@ -253,16 +228,13 @@ impl DefaultController {
 				"ResponseStatus": code,
 		});
 
-		//
 		info!("request_info = {:#?}", request_info);
 
-		//
 		let request_info_str = serde_json::to_string(&request_info)
 			.map_err(|e| format!("Error serializing request info: {}", e))?;
 
 		info!("request_info_str = {:#?}", request_info_str);
 
-		//
 		if request_info_str.is_empty() {
 			warn!("--- request_info_str is empty.");
 
@@ -272,7 +244,6 @@ impl DefaultController {
 			));
 		}
 
-		//
 		let mut headers = HeaderMap::new();
 		if renewal {
 			headers.insert("NewToken", self.new_token.parse().unwrap());
@@ -283,24 +254,18 @@ impl DefaultController {
 			code, message, addition, request_info_str
 		);
 
-		//
 		info!("body_for_debug {:#?}", body_for_debug);
 
-		//
-		//
-		//
 		let base_res = BaseRes {
 			code: code,
 			message: message.to_string(),
 		};
 
-		//
 		let res = DataRes {
 			base_res: base_res,
 			data: Some(task),
 		};
 
-		//
 		match serde_json::to_string(&res) {
 			Ok(body) => {
 				let response_body = axum::http::Response::builder()
@@ -319,16 +284,11 @@ impl DefaultController {
 	// M - DefaultController - handle_error_bad_request
 	// ----------------------------------------------
 	fn handle_error_bad_request_simple(&self, code: u16, message: &str) -> BaseRes {
-		//
-		logger_debug!("");
-
-		//
-		let base_res = BaseRes {
+		debug!("handle_error_bad_request_simple");
+		BaseRes {
 			code,
 			message: message.to_string(),
-		};
-		//
-		base_res
+		}
 	}
 
 	// ----------------------------------------------
@@ -344,15 +304,11 @@ impl DefaultController {
     client_ip: &str,
     extensions: &axum::http::Extensions,
   ) -> String {
-  
-  //
-  logger_debug!("");
+  debug!("handle_error_status_bad_request");
 
-  //
   let connect_info = extensions.get::<axum::extract::ConnectInfo<SocketAddr>>();
   warn!("ConnectInfo: {:?}", connect_info);
 
-  //
   let client_ip: String = headers
   .get("X-Real-ip")
   .and_then(|v| v.to_str().ok())
@@ -371,7 +327,6 @@ impl DefaultController {
           })
   });
 
-  //
   warn!("BAD req - Client IP: {:#?}", client_ip);
 
     let request_info = RequestMessageData {
@@ -384,13 +339,10 @@ impl DefaultController {
       request_auth: "".to_string(),
     };
 
-    //
     match serde_json::to_string(&request_info) {
-      // OK
       Ok(json_str) => {
         format!("message: {}; addition: {}; request: {}", message, addition, json_str)
       }
-      // ERR
       Err(e) => {
         error!("Failed to serialize request info: {}", e);
         format!("message: {}; addition: {}; request: {}", message, addition, e)
@@ -429,7 +381,6 @@ impl DefaultController {
 				"ResponseStatus": code,
 		});
 
-		//
 		let base_res = json!({
 				"code": code,
 				"message": message,
@@ -460,46 +411,13 @@ impl DefaultController {
 }
 
 // ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
 // impl - ContainerController
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
 // ----------------------------------------------
 impl ContainerController {
 	// ----------------------------------------------
 	// M - new
 	// ----------------------------------------------
 	pub fn new(state: Arc<Mutex<AppState>>, new_token: String) -> Self {
-		//
-		logger_debug!("");
-
-		//
 		ContainerController {
 			state: state,
 			default_controller: DefaultController::new(new_token),
@@ -513,29 +431,20 @@ impl ContainerController {
       &self,
       req: Request<Body>,
   ) -> impl axum::response::IntoResponse {
-		//
-		logger_debug!("");
+		debug!("create_container");
    
-    //
     let ConnectInfo(addr) = req.extensions().get::<ConnectInfo<SocketAddr>>()
         .expect("ConnectInfo should be present");
     debug!("Client IP : {}", addr.ip());
-
-		//
-		let response = self.process_payload_container(req).await;
-
-    //
-    response
+		self.process_payload_container(req).await
 	}
 
 	// ----------------------------------------------
 	// M - ContainerController - process_payload_mika
 	// ----------------------------------------------
 	async fn process_payload_container(&self, req: Request<Body>) -> impl IntoResponse {
-		//
-		logger_debug!("");
+		debug!("process_payload_container");
 
-    //
     let (parts, body) = req.into_parts();
 
     let headers = parts.headers.clone();
@@ -546,17 +455,12 @@ impl ContainerController {
     let ConnectInfo(addr) = parts.extensions.get::<ConnectInfo<SocketAddr>>()
     .expect("ConnectInfo should be present");
 
-
-    //
     debug!("Client IP: {}", addr.ip());
 
-    // body_bytes
     let body_bytes = match to_bytes(body, usize::MAX).await {
-      // OK
       Ok(bytes) => {
         bytes
       }
-      // ERR
       Err(e) => {
         let message = format!("Failed to read request body: {}", e);
         let err_mes = self.default_controller.handle_error_status_bad_request(
@@ -583,16 +487,12 @@ impl ContainerController {
     }
     };
 
-    // serde_json::from_slice
     let container = match serde_json::from_slice::<Container>(&body_bytes) { // deserialize the JSON file into a Container
-      // OK
       Ok(container) => {
         info!("Container deserialized: {:?}", container);
         container
       }
-      // ERR
       Err(e) => {
-        //
         let message = format!("get body error: {}", e);
         let err_mes = self.default_controller.handle_error_status_bad_request(
             consts::ERROR_CREATE_CONTAINER_FAILED,
@@ -618,15 +518,11 @@ impl ContainerController {
       }
     };
 
-    //
     let raw_app_response = match create_task(container).await {
-      // OK
       Ok(response) => {
         response
       }
-      // ERR
       Err(e) => {
-        //
         let app_response = AppResponse {
           exit_cause: "".to_string(),
           stdout: "".to_string(),
@@ -634,12 +530,10 @@ impl ContainerController {
           exit_code: -1,
         };
       
-      //
       let app_response_json = serde_json::to_string(&app_response)
         .unwrap_or_else(|_| "Failed to serialize response".to_string());
       let message = format!("create container failed, error: {}, logs: \n{}", e, app_response_json);
 
-      //
       error!("original message: {}", message);
 
       let err_mes = self.default_controller.handle_error_status_bad_request(
@@ -666,10 +560,7 @@ impl ContainerController {
                   );
 
       } // End ERR
-
-
     };
-
 
     // success
     let body_str = String::from_utf8_lossy(&body_bytes).to_string();
@@ -696,7 +587,6 @@ impl ContainerController {
     info!("{}", mesg);
 
 
-      //
       let mut response_headers = HeaderMap::new();
       if let Some(token) = new_token_opt {
           response_headers.insert("NewToken", token.parse().unwrap());
@@ -710,8 +600,7 @@ impl ContainerController {
 	// M - ContainerController - get_container
 	// ----------------------------------------------
 	async fn get_container(&self, req: Request<Body>) -> impl IntoResponse {
-		//
-		logger_debug!("");
+		debug!("get_container");
 
 		let headers = req.headers();
 
@@ -730,7 +619,6 @@ impl ContainerController {
 				let message = "get ContainerConf info successful.";
 				let code = 200;
 
-				//
 				debug!("task = {:#?}", &task);
 
 				// Call handle_success2 to build the response
@@ -782,13 +670,8 @@ impl ContainerController {
 	// M - ContainerController - get_health
 	// ----------------------------------------------
 	async fn get_health(&self) -> Json<BaseRes> {
-		//
-		logger_debug!("");
-
-		//
+		debug!("get_health");
 		let base_res = self.default_controller.handle_success_simple(200, "Server is healthy.");
-
-		//
 		Json(base_res)
 	}
 
@@ -796,30 +679,17 @@ impl ContainerController {
 	// M - ContainerController - delete_container
 	// ---------------------------------------------------
 	async fn delete_container(&self) -> impl IntoResponse {
-		//
-		logger_debug!("");
+		debug!("delete_container");
 
-		//
 		match module_worker::delete_task().await {
-			//
 			Ok(_) => {
-				//
 				let base_res = self.default_controller.handle_success_simple(200, "DELETING container OK.");
-
 				Json(base_res)
 			}
-
-			//
 			Err(err) => {
-				//
 				let err_message_default = "DELETING container BAD.".to_string();
-
-				//
 				let err_message = format!("{}{}", err_message_default, err).to_string();
-
-				//
 				let base_res = self.default_controller.handle_error_bad_request_simple(400, &err_message);
-
 				Json(base_res)
 			}
 		}
@@ -829,34 +699,21 @@ impl ContainerController {
 	// M - ContainerController - cancel_container_task
 	// ---------------------------------------------------
 	async fn cancel_container_task(&self, req: Request<Body>) -> impl IntoResponse {
-		//
-		logger_debug!("");
+		debug!("cancel_container_task");
 
 		let headers: &HeaderMap = req.headers();
 
-		//
 		warn!("headers = {:#?}", headers);
 
-		//
 		match module_worker::cancel_inter_task().await {
-			//
 			Ok(_) => {
-				//
 				let base_res = self.default_controller.handle_success_simple(200, "CANCELING task OK.");
-
 				Json(base_res)
 			}
-			//
 			Err(err) => {
-				//
 				let err_message_default = "CANCELING task BAD.".to_string();
-
-				//
 				let err_message = format!("{}{}", err_message_default, err).to_string();
-
-				//
 				let base_res = self.default_controller.handle_error_bad_request_simple(400, &err_message);
-
 				Json(base_res)
 			}
 		}
@@ -864,45 +721,23 @@ impl ContainerController {
   
 }
 
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-// ----------------------------------------------
-
 // ---------------------------------------------------
 // F - manager_server
 // ---------------------------------------------------
 pub async fn manager_server(result: Result<&'static str, &'static str>) -> Result<&str, &str> {
-	//
-	logger_debug!("");
+	debug!("manager_server");
 
-	//
 	let str = "OK!";
-
-	//
 	let router = routing_init().await;
 
-	//
 	match result {
-		// OK
 		Ok(answer) => {
-			//
 			if answer == "start" {
 				// Bind the address to the listener.
 				let listener = tokio::net::TcpListener::bind(DEFAULT_ADDRESS).await.unwrap();
 
 				// Message.
 				println!("Listening on {}", listener.local_addr().unwrap());
-
-
-
-
-
-				// //
 				axum::serve(
           listener,
           router.into_make_service_with_connect_info::<SocketAddr>(),
@@ -914,36 +749,26 @@ pub async fn manager_server(result: Result<&'static str, &'static str>) -> Resul
 			} else {
 			}
 		}
-
-		//
 		Err(answer) => {
 			error!("ERROR: Weird error: {}", answer);
 		}
 	}
-
-	//
 	Ok(&str)
 }
-
 
 // ---------------------------------------------------
 // routing_init
 // ---------------------------------------------------
 async fn routing_init() -> Router {
-	//
-	logger_debug!("");
+	debug!("routing_init");
 
-	//
 	let methods = vec![Method::GET, Method::POST, Method::DELETE];
 	let headers = vec![AUTHORIZATION, CONTENT_TYPE];
 
 	// CORS
 	let cors = CorsLayer::new().allow_origin(Any).allow_methods(methods).allow_headers(headers);
 
-	//
 	let name: String = String::from("Hello.");
-
-	//
 	let state = Arc::new(Mutex::new(AppState {
 		name: name,
 	}));
@@ -951,65 +776,46 @@ async fn routing_init() -> Router {
 	let container_controller =
 		Arc::new(ContainerController::new(state.clone(), "new_token".to_string()));
 
-	//
 	let container_controller = container_controller.clone();
 
 	// Router
-	let router = Router::new()
-		//
+	Router::new()
 		.route("/", get(handler))
-		//
-		// create
 		.route(ROUTE_SW_API_V1_CONTAINER, {
 			let controller = container_controller.clone();
 			post(move |body| async move { controller.create_container(body).await })
 		})
-		//
-		// delete
 		.route(ROUTE_SW_API_V1_CONTAINER, {
 			let controller = container_controller.clone();
 			delete(move || async move { controller.delete_container().await })
 		})
-		//
-		// get container
 		.route(ROUTE_SW_API_V1_CONTAINER, {
 			let controller = container_controller.clone();
 			get(move |req: Request<Body>| async move {
 				controller.get_container(req).await
 			})
 		})
-		//
-		// cancel
 		.route(ROUTE_SW_API_V1_CONTAINER_CANCEL, {
 			let controller = container_controller.clone();
 			post(move |req: Request<Body>| async move { controller.cancel_container_task(req).await })
 		})
-		//
-		// health
 		.route(&ROUTE_SW_API_V1_PUB_HEALTH, {
 			let controller = container_controller.clone();
 			get(move || async move { controller.get_health().await })
 		})
-		//
 		.with_state(state)
-		.layer(cors);
-
-	//
-	router
+		.layer(cors)
 }
 
 // ---------------------------------------------------
 // handler
 // ---------------------------------------------------
 async fn handler() -> Html<String> {
-	//
-	logger_debug!("");
+	debug!("handler");
 
-	//
 	let today = chrono::Local::now();
 	let formatted_date = today.format("%Y-%m-%d %H:%M:%S").to_string();
 
-	//
 	let html_content = format!(
 		r#"
             <html>
@@ -1037,6 +843,5 @@ async fn handler() -> Html<String> {
 		formatted_date
 	);
 
-	//
 	Html(html_content)
 }

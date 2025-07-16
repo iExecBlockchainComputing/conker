@@ -1,7 +1,4 @@
-// ====================================
-// import
-// ====================================
-use crate::{logger_debug, module_utils::util, post_compute, pre_compute};
+use crate::{module_utils::util, post_compute, pre_compute};
 use base64::{engine::general_purpose::URL_SAFE, Engine};
 use bollard::container::{
 	Config, CreateContainerOptions, InspectContainerOptions,
@@ -19,20 +16,19 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use futures_util::stream::StreamExt;
 use lazy_static::lazy_static;
-use log::warn;
 use serde::{Deserialize, Serialize};
 use serde_json::{self};
 use tokio::fs::OpenOptions;
 use std::collections::HashMap;
-use std::fs::{self};
+use std::env;
+use std::fs::{self, File};
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 use std::sync::Arc;
-use std::{env, fs::File /*, io::Read*/};
 use tokio::sync::oneshot;
 use tokio::sync::Mutex;
-use tracing::{debug, error, /*event,*/ info /*, trace, warn*/};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 // ====================================
@@ -143,9 +139,6 @@ impl Clone for CancelSender {
 // =====================================================================
 impl CancelSender {
 	pub fn new() -> Self {
-		//
-		logger_debug!("");
-
 		// inits both sender and receiver
 		let (sender, receiver) = oneshot::channel::<()>();
 		Self {
@@ -199,10 +192,8 @@ pub struct AppResponse {
 // F - get_task_status
 // ---------------------------------------------------
 pub async fn get_task_status() -> Result<Arc<Task>, String> {
-	//
-	logger_debug!("");
+	debug!("get_task_status");
 
-	//
 	let mut worker_guard = WORKER.lock().await;
 
 	// Check if there is a Task inside "worker_guard"
@@ -238,14 +229,11 @@ impl Task {
 	pub async fn get_container_info(
 		&self,
 	) -> Result<Option<bollard::models::ContainerInspectResponse>, Box<dyn std::error::Error>> {
-		//
-		logger_debug!("");
+		debug!("get_container_info");
 
-		//
 		info!("module_worker.rs > Task > get_container_info()");
 		info!("t.Status = {}", self.status);
 
-		//
 		if self.status == RUNNING.to_string() || self.status == CREATED.to_string() {
 			let docker = Docker::connect_with_local_defaults()?;
 			let container_info = docker.inspect_container(&self.container_conf.name, None).await;
@@ -269,17 +257,15 @@ impl Task {
 	// M - save_task
 	// ---------------------------------------------------
 	pub async fn save_task(&self) -> Result<(), std::io::Error> {
-		//
-		logger_debug!("");
+		info!("saving task info");
 
 		// Mutex lock to avoid many writing at the same time
 		let _lock = self.save_mutex.lock().await;
 
 		// Serialization of the Task objet into a JSON format
 		let task_info = serde_json::to_vec(self)?;
-		let task_info_debug = serde_json::to_string_pretty(self)?;
 
-		warn!("task_info_debug = {:#?}", task_info_debug);
+		trace!("task_info_debug = {:#?}", self);
 
 		// File writing
 		let mut file = File::create(&self.task_info_save_path)?;
@@ -294,8 +280,7 @@ impl Task {
 	// M - check_param
 	// ---------------------------------------------------
 	pub async fn check_param(&self) -> Result<(), String> {
-		//
-		logger_debug!("");
+		debug!("check_params");
 
 		// Port checking
 		for p in &self.container_conf.ports {
@@ -312,50 +297,38 @@ impl Task {
 	// M - Task - run
 	// ---------------------------------------------------
 	pub async fn run(&mut self) -> Result<AppResponse, String> {
-		//
-		logger_debug!("");
+		debug!("run");
 
-		//
 		let image_info = &self.container_conf.image_info;
 
-		//
 		// pull_image
-		//
 		if let Err(err) = self.pull_image(image_info.clone()).await {
 			error!("ERROR-> Pulling inage , error {}", err);
 			return Err(err);
 		}
 
-		//
 		// attest
-		//
 		if let Err(err) = self.attest().await {
 			self.status = FAILED.to_string();
 			error!("Error: {}", err);
 			return Err(err);
 		}
 
-		//
 		// create_dirs
-		//
 		if let Err(err) = self.create_dirs().await {
 			self.status = FAILED.to_string();
 			error!("Error: {}", err);
 			return Err(err);
 		}
 
-		//
 		// run_pre_compute
-		//
 		if let Err(err) = self.run_pre_compute().await {
 			self.status = FAILED.to_string();
 			error!("Error: {}", err);
 			return Err(err);
 		}
 
-		//
 		// run_compute
-		//
     let m_response =  self.run_compute().await;
     let app_response;
 
@@ -378,7 +351,6 @@ impl Task {
       }
     }
 
-		// 
 		match env::var(util::IEXEC_TASK_ID) {
 			Ok(task_id) => {
 				info!("Found IEXEC_TASK_ID: {}", task_id);
@@ -388,12 +360,9 @@ impl Task {
 			}
 		}
 
-		// 
 		let chain_task_id = env::var(util::RESULT_TASK_ID).ok();
 
-		//
 		// run_post_compute
-		//
 		if let Err(err) = self.run_post_compute(chain_task_id).await {
 			self.status = FAILED.to_string();
 			error!("Error: {}", err);
@@ -408,9 +377,7 @@ impl Task {
 		};
 		info!("{}", mesg);
 
-    //
 		// clear_task_files
-		//
 		if let Err(err) = self.clear_task_files().await {
 			self.status = FAILED.to_string();
 			error!("Error: {}", err);
@@ -473,8 +440,7 @@ impl Task {
 	// M - Task - run_compute
 	// ---------------------------------------------------
 	pub async fn run_compute(&mut self) -> Result<AppResponse, String> {
-		//
-		logger_debug!("");
+		debug!("run_compute");
 
 
     		// App response.
@@ -500,17 +466,13 @@ impl Task {
 				// Event Failed
 				self.status = FAILED.to_string();
 				
-        //
         let mesg = format!("exit_cause: {:?}, stdout: {:?}, stderr: {:?}, exit_code: {}, run_compute error: {:?}",
         app_response_default.exit_cause, app_response_default.stdout, app_response_default.stderr, app_response_default.exit_code, err);
-
 
 				if let Err(err) = self.add_event(self.status.clone(), &mesg).await {
 					return Err(format!("Event can't be added: {}", err));
 				};
 				error!("run_compute failed: {:#?}", err);
-
-        //
 				Err(mesg)
 			}
 		}
@@ -520,16 +482,13 @@ impl Task {
 	// M - Task - create_and_start_container
 	// ---------------------------------------------------
 	pub async fn create_and_start_container(&mut self) -> Result<AppResponse, String> {
-		//
-		logger_debug!("");
+		debug!("create_and_start_container");
 
-		//
 		self.status = CREATING.to_string();
 		let mesg = "Begin to create container".to_string();
 		if let Err(err) = self.add_event(self.status.clone(), &mesg).await {
 			return Err(format!("Event can't be added: {}", err));
 		}
-		//
 		info!("mesg = {}", mesg);
 
 		// App response.
@@ -555,7 +514,6 @@ impl Task {
 			..Default::default()
 		};
 
-		//
 		let cmd_string = self.container_conf.image_info.clone().unwrap().cmd;
 		debug!("cmd_string = {:#?}", cmd_string);
 
@@ -573,42 +531,30 @@ impl Task {
 			..Default::default()
 		};
 
-		//
 		// Config
-		//
-		debug!("config = {:#?}", config);
+		trace!("config = {:#?}", config);
 
 		let create_options = CreateContainerOptions {
 			name: &self.container_conf.name,
 			platform: None,
 		};
 
-		//
 		let response = docker
 			.create_container(Some(create_options), config)
 			.await
 			.map_err(|e| format!("Failed to create container: {}", e))?;
 
-		//
 		if !response.warnings.is_empty() {
 			warn!("Warnings: {:?}", response.warnings);
 		}
 
-		//
 		let success_msg = format!("create container successful: {:?}", response.warnings);
 		info!("{}", success_msg);
 
-		//
 		self.status = CREATED.to_string();
 		if let Err(err) = self.add_event(self.status.clone(), &success_msg).await {
 			return Err(format!("Event can't be added: {}", err));
 		}
-
-		// 22222
-		//
-		// Start container
-		//
-		// 22222
 
 		// Event Starting
 		self.status = STARTING.to_string();
@@ -619,11 +565,9 @@ impl Task {
 
 		info!("{}", mesg);
 
-		//
 		let docker = Docker::connect_with_local_defaults()
 			.map_err(|e| format!("Failed to connect to Docker: {}", e))?;
 
-		//
 		let ctx = tokio::time::timeout(
 			std::time::Duration::from_secs(10),
 			docker.start_container(
@@ -636,19 +580,12 @@ impl Task {
 		// Container start
 		match ctx {
 			Ok(_inner) => {}
-
-			//
 			Err(_) => {
-				//
 				self.status = FAILED.to_string();
 				let mesg = format!("Container '{}' is NOT running", self.container_conf.name);
-				//
 				if let Err(err) = self.add_event(self.status.clone(), &mesg).await {
-					//
 					return Err(format!("Event can't be added: {}", err));
 				}
-
-				//
 				return Err("Timeout starting container".to_string());
 			}
 		}
@@ -656,15 +593,11 @@ impl Task {
 		// Event Running
 		self.status = RUNNING.to_string();
 		let mesg = format!("Container '{}' is running", self.container_conf.name);
-		//
 		if let Err(err) = self.add_event(self.status.clone(), &mesg).await {
-			//
 			return Err(format!("Event can't be added: {}", err));
 		}
 
-		//
 		// Async
-		//
 
 		let cancel_rx = self.cancel_chan.receiver.take().expect("Cancel receiver missing");
 		let container_id = response.id.clone();
@@ -675,7 +608,6 @@ impl Task {
 			task_clone.monitor_cancel(cli_clone, container_id, cancel_rx).await;
 		});
 
-		//
 		let mut wait_stream = docker.wait_container(
 			&response.id,
 			Some(WaitContainerOptions {
@@ -683,19 +615,14 @@ impl Task {
 			}),
 		);
 
-		//
 		let status_ch = wait_stream.next().await;
 
-		//
 		let status_str = match &status_ch {
-			// 
 			Some(Ok(response)) => response.status_code.to_string(),
-			//
 			Some(Err(e)) => "unknown".to_string(),
 			None => "no response".to_string(),
 		};
 
-		//
 		let error_str = match &status_ch {
 			Some(Err(e)) => e.to_string(),
 			_ => "none".to_string(),
@@ -707,43 +634,31 @@ impl Task {
 			"Container '{}' is waiting, status: {}, error: {}",
 			self.container_conf.name, status_str, error_str
 		);
-		//
 		if let Err(err) = self.add_event(self.status.clone(), &mesg).await {
-			//
 			return Err(format!("Event can't be added: {}", err));
 		}
 
-		//
 		// Select
-		//
 		match status_ch {
 			Some(Err(e)) => {
-				// R
 				return Err(format!("error waiting for container: {}", e).into());
 			}
 			Some(Ok(status)) => {
-				//
 				info!("Container exited with status code: {}", status.status_code);
 
-				//
 				let logs_options = LogsOptions::<&str> {
 					stdout: true,
 					stderr: true,
 					..Default::default()
 				};
 
-				//
 				let mut logs_stream = docker.logs(&response.id, Some(logs_options));
-
-				//
 				let mut stdout_buf: Vec<u8> = Vec::new();
 				let mut stderr_buf: Vec<u8> = Vec::new();
 
-				//
 				while let Some(result) = logs_stream.next().await {
 					match result {
 						Ok(log_output) => {
-							//
 							match log_output {
 								LogOutput::StdOut {
 									message,
@@ -765,26 +680,21 @@ impl Task {
 					}
 				}
 
-				//
 				let stdout = String::from_utf8_lossy(&stdout_buf).to_string();
 				let stderr = String::from_utf8_lossy(&stderr_buf).to_string();
 
 				info!("Container stdout : {}", stdout);
 				info!("Container Stderr : {}", stderr);
 
-				//
 				let container_info = docker
 					.inspect_container(&response.id, None::<InspectContainerOptions>)
 					.await
 					.map_err(|e| format!("Ereror inspecting container: {}", e))?;
 
-				//
 				let exit_code = container_info.state.and_then(|s| s.exit_code).unwrap_or(0);
 
-				//
 				info!("Container Exit Code: {}", exit_code);
 
-				//
 				let exit_cause = if exit_code != 0 {
 					FAILED
 				} else {
@@ -792,7 +702,6 @@ impl Task {
 				}
 				.to_string();
 
-				//
 				app_response = AppResponse {
 					exit_cause,
 					stdout,
@@ -800,56 +709,37 @@ impl Task {
 					exit_code: status.status_code,
 				};
 
-				//
 				if status.status_code != 0 {
-					//
 					// Event Failed
 					self.status = FAILED.to_string();
 					let mesg = format!(
 						"Container '{}' failed with status code: {}",
 						self.container_conf.name, status.status_code
 					);
-					//
 					if let Err(err) = self.add_event(self.status.clone(), &mesg).await {
-						//
 						return Err(format!("Event can't be added: {}", err));
 					}
 					debug!(mesg);
-
-					// R
 					return Err(
 						format!("Docker container failed, status code: {}", status.status_code).into(),
 					);
-
-					//
-				}
-				// if status.status_code != 0
-				else {
-					//
+				} else {
 					self.status = POSTCOMPUTE.to_string();
 					let mesg = format!(
 						"Container '{}' finished successfully, status {:?}",
 						self.container_conf.name, status
 					);
-					//
 					if let Err(err) = self.add_event(self.status.clone(), &mesg).await {
-						//
 						return Err(format!("Event can't be added: {}", err));
 					}
 					debug!(mesg);
-
-					// R
 					return Ok(app_response);
 				}
 			}
 			None => {
-				// R
 				return Err("no response from container wait".into());
 			}
 		}
-
-		//
-		// Ok(app_response)
 	}
 
 	// ---------------------------------------------------
@@ -861,24 +751,16 @@ impl Task {
 		container_id: String,
 		cancel_rx: oneshot::Receiver<()>,
 	) {
-		//
-		logger_debug!("");
+		debug!("monitor_cancel");
 
-		//
 		if cancel_rx.await.is_ok() {
-			//
 			info!("Cancel signal received. Stopping container...");
-
-			//
 			if let Err(e) = docker.stop_container(&container_id, None).await {
-				//
 				info!("Error stopping container: {}", e);
 			} else {
-				//
 				info!("Container stopped successfully.");
 			}
 		}
-
 	}
 
 	// ---------------------------------------------------
@@ -930,12 +812,9 @@ impl Task {
 	// M - Task - create_dirs
 	// ---------------------------------------------------
 	pub async fn create_dirs(&self) -> Result<(), String> {
-		//
-		logger_debug!("");
+		debug!("create_dirs");
 
-		//
 		for mount in &self.container_conf.mounts {
-			//
 			fs::create_dir_all(mount.source.as_deref().ok_or("Mount source is None")?)
 				.map_err(|e| e.to_string())?;
 
@@ -976,116 +855,79 @@ impl Task {
 	// M - Task - attest
 	// ---------------------------------------------------
 	pub async fn attest(&mut self) -> Result<(), String> {
-		//
-		logger_debug!("");
+		debug!("attest");
 
-		//
 		self.status = ATTESTING.to_string();
 		let mesg = "Begin to do remote attestation".to_string();
 		if let Err(err) = self.add_event(self.status.clone(), &mesg).await {
 			return Err(format!("Event can't be added: {}", err));
 		}
 
-		//
 		info!("{}", mesg);
 
-		info!("attest - - - - - - 1");
-		//
 		let skip_attest = false; 
 
 		if !skip_attest {
-			info!("attest - - - - - - 2");
 			let docker = Docker::connect_with_local_defaults()
 				.map_err(|e| format!("Failed to connect to Docker: {}", e))?;
 
-			//
 			let image_name = &self.container_conf.image_info.as_ref().unwrap().image_name;
-			//
 			let image_inspect = docker
 				.inspect_image(image_name)
 				.await
 				.map_err(|e| format!("Failed to inspect image '{}': {}", image_name, e))?;
-			info!("attest - - - - - - 3");
 
-			warn!("image_inspect = {:#?}", image_inspect);
+			trace!("image_inspect = {:#?}", image_inspect);
 
 			fs::create_dir_all(&self.secret_save_dir).map_err(|e| e.to_string())?;
-
-			info!("attest - - - - - - 4");
 
 			// ERROR
 			if self.container_conf.kms_endpoints.is_empty() {
 				let msg = "no kms endpoint configured".to_string();
-				info!("attest - - - - - - 5");
 
-				//
 				if let Err(err) = self.add_event(self.status.clone(), &msg).await {
-					info!("attest - - - - - - 6");
 					return Err(format!("Event can't be added: {}", err));
 				}
 				error!("{}", msg);
-				info!("attest - - - - - - 7");
 				return Err(msg);
 			}
 
-			//
 			let image_id = image_inspect.id.expect("Image ID is missing.");
-
-			info!("attest - - - - - - 8");
-			//
 			let split_id: Vec<&str> = image_id.split(':').collect();
 
 			// ERROR
 			if split_id.len() != 2 {
 				let msg = "image id format error".to_string();
-				info!("attest - - - - - - 9");
-				//
 				if let Err(err) = self.add_event(self.status.clone(), &msg).await {
 					return Err(format!("Event can't be added: {}", err));
 				}
-
-				info!("attest - - - - - - 10");
 				error!("{}", msg);
-
 				return Err(msg);
 			}
 
-			info!("attest - - - - - - 11");
-			//
 			for k in &self.container_conf.kms_endpoints {
 				let envs =
 					vec![format!("appId={}", &self.container_conf.session_id), format!("kbsEndpoint={}", k)];
 
-
-				warn!("k = {}", k); 
-				warn!("envs = {:#?}", envs);
+				debug!("k = {:?}", k);
+				debug!("envs = {:?}", envs);
 
 				let mut args_list = vec!["-v", "nullverifier", "-f", "-s"];
-				// 
 				let secret_file_path =
 					format!("{}/secret-{}.json", self.secret_save_dir, &self.container_conf.session_id);
 				args_list.push(&secret_file_path);
 
-				warn!("args_list = {:#?}", args_list); 
-				warn!("secret_provider_agent = {:#?}", &self.secret_provider_agent);
-				warn!("&[&args_list] = {:#?}", &[&args_list]);
+				debug!("args_list = {:?}", args_list);
+				debug!("secret_provider_agent = {:?}", &self.secret_provider_agent);
 
-				info!("attest - - - - - - 11-A");
 				let err_code = run_actuator_cmd(&self.secret_provider_agent, &envs, &args_list);
-				info!("attest - - - - - - 11-B");
 
-				warn!("err_code = {:#?}", err_code);
-
-				//
 				match err_code {
 					Ok(code) => {
 						if code != 0 {
 							let _ = fs::remove_dir_all(&self.secret_save_dir);
 							let msg = format!("get secret failed, error: {}", code);
 
-							info!("attest - - - - - - 12");
-
-							//
 							match self.add_event(self.status.clone(), &msg).await {
 								Ok(_) => {}
 								Err(err) => {
@@ -1098,20 +940,16 @@ impl Task {
 						}
 						// Go B
 						else {
-							// 1
 							let json_content = fs::read_to_string(&secret_file_path)
 								.map_err(|e| format!("Failed to read file: {}", e))?;
 
-							//
 							warn!("secret_file_path = {:#?}", &secret_file_path);
-							//
 							warn!("json_content = {:#?}", &json_content);
 
 							// 2 - Convert the JSON file into the Services struct
 							let services: Services = serde_json::from_str(&json_content)
 								.map_err(|e| format!("Error parsing JSON data: {}", e))?;
 
-							//
 							info!("services: {:?}", services);
 
 							// 3 - Check if pre-compute Services exists in the JSON file.
@@ -1120,7 +958,6 @@ impl Task {
 
 							*has_pre_compute_service = services.pre_compute.is_some(); // get true or false
 
-							//
 							if *has_pre_compute_service {
 								info!("Pre-compute service exists.");
 							}
@@ -1130,7 +967,6 @@ impl Task {
 							let mut service_map =
 								vec![("app", &services.app), ("post-compute", &services.post_compute)];
 
-							//
 							warn!("service_map = {:#?}", service_map.clone());
 
 							// 5 - Adding the pre-compute Services in the previous vector only if it exists.
@@ -1149,16 +985,13 @@ impl Task {
 
 								warn!("env_vars = {:#?}", env_vars);
 
-								//
 								for (key, value) in *env_vars {
 									info!("Setting environment variable: key = value --> {} = {}", key, value);
 
-									//
 									if *service_name == "app" {
 										// Insert all env_vars from "app" service_name to the  container_conf.env Vec<String>
 										info!("service_name = {:#?}", service_name); // service_name = "app"
 
-										//
 										if let Some(env) = self.container_conf.env.as_mut() {
 											warn!("Before env = {:#?}", env);
 											env.push(format!("{}={}", key, value));
@@ -1167,7 +1000,6 @@ impl Task {
 											warn!("`env` is None in container_conf");
 										}
 
-										//
 										warn!("INSIDE 1 - service_map");
 									} else {
 										env::set_var(&key, &value); // Insert all other service_name data to the general env.
@@ -1176,10 +1008,8 @@ impl Task {
 								}
 							}
 						}
-						// Go E
 					}
 					Err(err) => {
-						// Err
 						error!("Failed to run actuator command: {}", err);
 					}
 				}
@@ -1187,8 +1017,6 @@ impl Task {
 		}
 
 		self.status = ATTESTED.to_string();
-		info!("attest - - - - - - 14");
-		//
 		match self.add_event(self.status.clone(), "do remote attesting successful").await {
 			Ok(_) => {}
 			Err(err) => {
@@ -1203,8 +1031,7 @@ impl Task {
 	// M - run_pre_compute
 	// ---------------------------------------------------
 	pub async fn run_pre_compute(&mut self) -> Result<(), String> {
-		//
-		logger_debug!("");
+		debug!("run_pre_compute");
 
 		info!("TEE pre-compute started");
 
@@ -1221,10 +1048,8 @@ impl Task {
 			// Set the default value to "" if there is no IEXEC_TASK_ID.
 			let chain_task_id = env::var(util::IEXEC_TASK_ID).unwrap_or_else(|_| String::new());
 
-      //
 			if chain_task_id.is_empty() { // chain_task_id -> ""
         warn!("~ ~ ~ ~ ~ 1.A");
-        //
 				error!("TEE pre-compute cannot go further without taskID context");
 				return Err("TEE pre-compute cannot go further without taskID context".to_string());
       }
@@ -1240,19 +1065,14 @@ impl Task {
 				}
 			}
       
-			//
-			// pre_compute_app::run()
-			//
 			let exit_code = pre_compute::pre_compute_app::run(&chain_task_id).await;
       
 			// Check
 			match exit_code {
         Ok(_) => {
-          //
 					info!("TEE pre-compute completed");
 				}
 				Err(e) => {
-          // 
           let message_error = format!("TEE pre-compute failed with known error: {:?}", e);
 					error!(message_error);
           
@@ -1265,7 +1085,6 @@ impl Task {
 
 		info!("~ ~ ~ ~ ~ 2");
 
-    //
 		Ok(())
 	}
 
@@ -1273,12 +1092,9 @@ impl Task {
 	// M - run_post_compute
 	// ---------------------------------------------------
 	pub async fn run_post_compute(&mut self, chain_task_id: Option<String>) -> Result<(), String> {
-		//
-		logger_debug!("");
+		debug!("run_post_compute");
 
-		// 
 		info!("TEE post-compute started");
-
 		info!("PC --------------- 1");
 
 		let result: Result<(), post_compute::replicate_status_cause::ReplicateStatusCause> =
@@ -1286,11 +1102,9 @@ impl Task {
 
       info!("PC --------------- 2");
 
-    //
 		match result {
 			Ok(_) => {
 				info!("PC --------------- 2.1");
-				// 
 				info!("Post compute started for task ID: {}", chain_task_id.clone().unwrap());
 		
 
@@ -1305,31 +1119,23 @@ impl Task {
           }
         }
 
-        //
 				Ok(())
 			}
 			Err(e) => {
-        //
         let message_error = format!("TEE post-compute failed with a known error: {:?}", e);
         error!(message_error);
 
-        //
         Err(message_error)
       }
-
-
 		}
-
 	}
 
 	// ---------------------------------------------------
 	// M - Task - add_event
 	// ---------------------------------------------------
 	pub async fn add_event(&mut self, action: String, message: &str) -> Result<(), String> {
-		//
-		logger_debug!("");
+		debug!("add_event");
 
-		//
 		let eve = Events {
 			action: action,
 			message: message.to_string(),
@@ -1338,14 +1144,11 @@ impl Task {
 
 		self.events.push(Box::new(eve));
 
-		//
 		if let Err(err) = self.save_task().await {
 			let error_message = format!("save task info failed, error: {}", err);
 			log::error!("{}", error_message);
 			return Err(error_message);
 		}
-
-		//
 		Ok(())
 	}
 
@@ -1353,27 +1156,19 @@ impl Task {
 	// M - Task - pull_image
 	// ---------------------------------------------------
 	pub async fn pull_image(&mut self, image_info: Option<ImageInfo>) -> Result<(), String> {
-		//
-		logger_debug!("");
-
-		//
 		self.status = PULLING.to_string();
 		let mesg = format!("begin to pull image: {}", image_info.as_ref().unwrap().image_name);
 
-		//
 		if let Err(err) = self.add_event(PULLING.to_string(), &mesg).await {
 			return Err(format!("Event can't be added: {}", err));
 		};
 
-		//
 		info!("{}", mesg);
 
-		//
 		if image_info.as_ref().is_none() {
 			return Err("image info is nil".to_string());
 		}
 
-		//
 		let client = match Docker::connect_with_local_defaults() {
 			Ok(cli) => cli,
 			Err(err) => {
@@ -1384,16 +1179,6 @@ impl Task {
 			}
 		};
 
-		//
-		let encoded_json = serde_json::to_string(&image_info.as_ref().unwrap().register_auth_info)
-			.map_err(|e| format!("Failed to encode auth info: {}", e))?;
-
-		let _auth_str = URL_SAFE.encode(encoded_json.as_bytes());
-
-		//
-		info!("_auth_str = {}", &_auth_str);
-
-		//
 		let auth_config = AuthConfig {
 			username: Some(
 				image_info.as_ref().unwrap().register_auth_info.as_ref().unwrap().username.clone(),
@@ -1404,38 +1189,29 @@ impl Task {
 			..Default::default()
 		};
 
-		//
 		let auth_json = serde_json::to_string(&auth_config)
 			.map_err(|e| format!("Failed to serialize auth config: {}", e))?;
 
 		let auth_bytes = Bytes::from(URL_SAFE.encode(auth_json.as_bytes()));
 
-		//
 		let options = CreateImageOptions {
 			from_image: image_info.as_ref().unwrap().image_name.clone(),
 			..Default::default()
 		};
 
-		//
 		let mut stream = client.create_image(Some(options), Some(auth_bytes), None);
 
-		//
 		while let Some(result) = stream.next().await {
 			match result {
 				Ok(create_image_info) => {
-					//
 					let mut output = String::new();
 
-					//
 					if let Some(status) = &create_image_info.status {
 						output.push_str(&format!("status: {}", status));
 					}
-					//
 					if let Some(progress) = &create_image_info.progress {
 						output.push_str(&format!(", progress: {}", progress));
 					}
-
-					//
 					if !output.is_empty() {
 						info!("{}", output);
 					}
@@ -1449,12 +1225,10 @@ impl Task {
 			}
 		}
 
-		//
 		let success_mesg =
 			format!("pull image: {} successfully", image_info.as_ref().unwrap().image_name);
 		info!("{}", success_mesg);
 
-		//
 		if let Err(err) = self.add_event(PULLING.to_string(), &mesg).await {
 			return Err(format!("Event can't be added: {}", err));
 		} else {
@@ -1468,7 +1242,6 @@ impl Task {
 			info!("event ------> {:?}", event);
 		}
 
-		//
 		Ok(())
 	}
 
@@ -1476,8 +1249,7 @@ impl Task {
 	// M - Task - clear
 	// ---------------------------------------------------
 	pub async fn clear(&mut self) -> Result<(), String> {
-		//
-		logger_debug!("");
+		debug!("clear");
 
 		debug!("1 ----- &self.task_info_save_path = {:#?}", &self.task_info_save_path);
 		warn!("self = {:#?}", self);
@@ -1499,9 +1271,7 @@ impl Task {
 			debug!("2 ----- &self.task_info_save_path = {:#?}", &self.task_info_save_path);
 			info!("self.status 3 = {}", self.status);
 
-			//
 			// remove_container
-			//
 			match self.remove_container(&self.container_conf.name.clone()).await {
 				Ok(_) => {
 					info!("OK removing container.")
@@ -1512,16 +1282,12 @@ impl Task {
 			}
 
 			debug!("3 ----- &self.task_info_save_path = {:#?}", &self.task_info_save_path);
-			//
 			// remove_image
-			//
 			let image_info_value =
 				self.container_conf.image_info.as_ref().map(|value| value.image_name.clone());
 
 			debug!("4 ----- &self.task_info_save_path = {:#?}", &self.task_info_save_path);
-			//
 			if let Some(image_name) = image_info_value {
-				//
 				match self.remove_image(&image_name.as_str()).await {
 					Ok(_) => {
 						debug!("5 a ----- &self.task_info_save_path = {:#?}", &self.task_info_save_path);
@@ -1558,38 +1324,26 @@ impl Task {
         }
     }
 
-
-
-
 			debug!("7 ----- &self.task_info_save_path = {:#?}", &self.task_info_save_path);
-			//
 			// remove_unused_images
-			//
 			if let Err(err) = self.remove_unused_images().await {
 				error!("{}", err);
 			};
 
 			debug!("8 ----- &self.task_info_save_path = {:#?}", &self.task_info_save_path);
-			//
 			// remove_unused_volumes
-			//
 			if let Err(err) = self.remove_unused_volumes().await {
 				error!("{}", err);
 			};
 			debug!("9 ----- &self.task_info_save_path = {:#?}", &self.task_info_save_path);
-		}
-		// end if self.status == ...
-		else {
-			//
+		} else {
 			debug!("10 ----- &self.task_info_save_path = {:#?}", &self.task_info_save_path);
 			return Err("Please cancel task first".to_string());
 		}
 
 		debug!("11 ----- &self.task_info_save_path = {:#?}", &self.task_info_save_path);
-		//delete_task
 		info!("Clearing task...");
 
-		//
 		debug!("12 ----- &self.task_info_save_path = {:#?}", &self.task_info_save_path);
 		return Ok(());
 	}
@@ -1598,13 +1352,11 @@ impl Task {
 	// M - Task - remove_container
 	// ---------------------------------------------------
 	pub async fn remove_container(&mut self, container_name: &str) -> Result<(), String> {
-		//
-		logger_debug!("");
+		debug!("remove_container");
 
 		// map_err helps to transform bollard::errors::Error directly in a String.
 		let docker = Docker::connect_with_local_defaults().map_err(|err| err.to_string())?;
 
-		//
 		let options = RemoveContainerOptions {
 			force: true,          // even if the container doesn't or can't be removed
 			..Default::default()  // others fields are filled with their value already there
@@ -1628,13 +1380,11 @@ impl Task {
 	// M - Task - remove_image
 	// ---------------------------------------------------
 	pub async fn remove_image(&mut self, image_name: &str) -> Result<(), String> {
-		//
-		logger_debug!("");
+		debug!("remove_image");
 
 		// map_err helps to transform bollard::errors::Error directly in a String.
 		let docker = Docker::connect_with_local_defaults().map_err(|err| err.to_string())?;
 
-		//
 		let options = RemoveImageOptions {
 			force: true,          // even if the container doesn't or can't be removed
 			..Default::default()  // others fields are filled with their value already there
@@ -1647,7 +1397,6 @@ impl Task {
 					info!("Image successfully removed: {:?}", image);
 				}
 				info!("Remove image successfully");
-
 				Ok(())
 			}
 			Err(err) => {
@@ -1662,23 +1411,18 @@ impl Task {
 	// M - Task - remove_image
 	// ---------------------------------------------------
 	pub async fn remove_unused_images(&mut self) -> Result<(), String> {
-		//
-		logger_debug!("");
+		debug!("remove_unused_images");
 
-		//
 		let client = Docker::connect_with_local_defaults()
 			.map_err(|err| format!("Docker connection failed: {}", err))?;
 
-		//
 		let filters = HashMap::new();
 		filters.clone().insert("until", vec!["10m"]);
 
-		//
 		let options = Some(PruneImagesOptions {
 			filters,
 		});
 
-		//
 		let prune_result: Result<ImagePruneResponse, bollard::errors::Error> =
 			client.prune_images(options).await;
 
@@ -1699,26 +1443,20 @@ impl Task {
 	// M - Task - remove_image
 	// ---------------------------------------------------
 	pub async fn remove_unused_volumes(&mut self) -> Result<(), String> {
-		//
-		logger_debug!("");
+		debug!("remove_unused_volumes");
 
-		//
 		let client = Docker::connect_with_local_defaults()
 			.map_err(|err| format!("Docker connection failed: {}", err))?;
 
-		//
 		let mut filters = HashMap::new();
 		filters.insert("", vec![""]);
 
-		//
 		let options = Some(PruneVolumesOptions {
 			filters,
 		});
 
-		//
 		let prune_result = client.prune_volumes(options).await;
 
-		//
 		match prune_result {
 			Ok(_) => {
 				info!("Remove unused volumes successful");
@@ -1738,16 +1476,12 @@ impl Task {
 	// M - cancel_task
 	// ---------------------------------------------------
 	pub fn cancel_task(&mut self) {
-		//
+		debug!("cancel_task");
 		if self.cancel_chan.sender.is_some() {
 			info!("Sending cancel signal...");
-
-			//
 			if let Some(sender) = self.cancel_chan.sender.take() {
 				let _ = sender.send(()); // Send the cancel signal
 			}
-
-			//
 			self.status = CANCELLED.to_string();
 			self.is_cancel = true;
 		} else {
@@ -1756,55 +1490,34 @@ impl Task {
 	}
 }
 
-// ==============================================================
-// ==============================================================
-// ==============================================================
-// ==============================================================
-// ==============================================================
-// ==============================================================
-// ==============================================================
-// ==============================================================
-// ==============================================================
-// ==============================================================
-// ==============================================================
-// ==============================================================
-
 // ---------------------------------------------------
 // F - delete_task
 // ---------------------------------------------------
 pub async fn delete_task() -> Result<(), String> {
-	//
-	logger_debug!("");
+	debug!("delete_task");
 
-	//
-	logger_debug!("delete_task - before lock");
+	debug!("delete_task - before lock");
 	let mut worker = WORKER.lock().await;
-	logger_debug!("delete_task - after lock");
+	debug!("delete_task - after lock");
 
 	info!("worker = {:?}", worker);
 
-
-    //
     match worker.as_mut() {
       None => {
-        //
         debug!("No task is running");
         return Err("no task now".to_string());
       }
       Some(task) => {
-        //
         warn!("WORKER TASK exists.");
 
         debug!(
           "From delete_task() -> {:p}, is_cancel: {}, status: {}, ",
           &task, task.is_cancel, task.status
         );
-        //
         if !task.is_cancel {
           return Err("Task must be cancelled before deleting".to_string());
         }
 
-        //
         if let Err(e) = task.clear().await {
           error!("clear task failed, error: {}", e);
           return Err(e);
@@ -1823,25 +1536,19 @@ pub async fn delete_task() -> Result<(), String> {
 // F - cancel_inter_task
 // ---------------------------------------------------
 pub async fn cancel_inter_task() -> Result<(), String> {
-	//
-	logger_debug!("");
+	debug!("cancel_inter_task");
 
-	//
-	logger_debug!("cancel_inter_task - before lock");
+	debug!("cancel_inter_task - before lock");
 	let mut worker = WORKER.lock().await;
-	logger_debug!("cancel_inter_task - after lock");
+	debug!("cancel_inter_task - after lock");
 
-	//
 	match worker.as_mut() {
 		None => {
 			warn!("No task is running.");
 			return Err("no task now".to_string());
 		}
 		Some(task) => {
-			//
 			debug!("From cancel_inter_task() -> BEFORE modifying task.is_cancel -> {:p}, is_cancel: {}, status: {}, ", &task, task.is_cancel, task.status);
-
-			//
 			task.cancel_task();
 
       drop(worker);
@@ -1856,7 +1563,6 @@ pub async fn cancel_inter_task() -> Result<(), String> {
           return Err(e);
         }
       }
-
 		}
 	}
 }
@@ -1865,8 +1571,7 @@ pub async fn cancel_inter_task() -> Result<(), String> {
 // F - manager_worker
 // ---------------------------------------------------
 pub async fn manager_worker() -> Result<&'static str, &'static str> {
-	//
-	logger_debug!("");
+	debug!("manager_worker");
 
 	if let Err(e) = init_task().await {
 		error!("Error initializing task: {:?}", e)
@@ -1882,8 +1587,7 @@ pub async fn manager_worker() -> Result<&'static str, &'static str> {
 // Otherwise, we assign it a default value: "task.json".
 // ---------------------------------------------------
 pub async fn init_task() -> Result<(), Box<dyn std::error::Error>> {
-	//
-	logger_debug!("");
+	debug!("init_task");
 
 	// Get the configuration file path.
 	// In this case, we retrieve TASK_INFO_SAVE_PATH if
@@ -1893,7 +1597,7 @@ pub async fn init_task() -> Result<(), Box<dyn std::error::Error>> {
 
 	// Check if file exists.
 	if !fs::metadata(&task_info_save_path).is_ok() {
-		info!("The file  {:?} doesn't exist.", task_info_save_path);
+		info!("The file {:?} doesn't exist.", task_info_save_path);
 		return Ok(()); // Returns OK even if the file doesn't exist.
 	}
 
@@ -1909,7 +1613,6 @@ pub async fn init_task() -> Result<(), Box<dyn std::error::Error>> {
 	// Update the WORKER var.
 	*worker_lock = Some(task);
 
-	//
 	Ok(())
 }
 
@@ -1917,7 +1620,7 @@ pub async fn init_task() -> Result<(), Box<dyn std::error::Error>> {
 // F - create_task
 // ---------------------------------------------------
 pub async fn create_task(container: Container) -> Result<AppResponse, std::io::Error> {
-	logger_debug!("");
+	debug!("create_task");
 
 	let _lock = TASK_MUTEX.lock().await; // Locking the mutex
 
@@ -2020,10 +1723,7 @@ pub async fn create_task(container: Container) -> Result<AppResponse, std::io::E
 // F - get_config_value
 // ---------------------------------------------------
 fn get_config_value(key: &str, default: &str) -> String {
-	//
-	logger_debug!("");
-
-	//
+	debug!("get_config_value");
 	std::env::var(key).unwrap_or_else(|_| default.to_string())
 }
 
@@ -2031,41 +1731,30 @@ fn get_config_value(key: &str, default: &str) -> String {
 // F - run_actuator_cmd
 // ---------------------------------------------------
 pub fn run_actuator_cmd(name: &str, envs: &[String], args: &[&str]) -> Result<i32, String> {
-	//
-	logger_debug!("");
-	info!("1 -- args = {:#?}", args); // --> "/secret/secret-145.239.161.248:3333.json",
+	debug!("run_actuator_cmd");
 
 	// Command with program name and arguments
 	let mut command = Command::new(name);
 	command.args(args);
 
-	//
-	info!("name = {:#?}", name); 
-	info!("envs = {:#?}", envs); 
-	info!("2 -- args = {:#?}", args); 
-	info!("command = {:#?}", command); 
+	debug!("name = {:#?}", name);
+	debug!("envs = {:#?}", envs);
+	debug!("command = {:#?}", command);
 
 	// Adding ENV
 	for env in envs {
-		//
-		info!("env = {:#?}", env);
+		debug!("env = {:#?}", env);
 
 		if let Some(eq_pos) = env.find('=') {
-			info!("eq_pos = {:#?}", eq_pos);
 			let (key, value) = env.split_at(eq_pos);
-			info!("key = {:#?}", key);
 			let value = &value[1..]; // Removing '='
-			info!("value = {:#?}", value);
-			info!("key,value = {:#?}", (key, value));
+			debug!("key,value = {:#?}", (key, value));
 			command.env(key, value);
 		}
 	}
 
 	// Execute command in order to get output
-	let output = command.output();
-	info!("Here --> output = {:#?}", output);
-
-	match output {
+	match command.output() {
 		Ok(output) => {
 			info!("output in match {:#?}", output);
 
@@ -2082,8 +1771,6 @@ pub fn run_actuator_cmd(name: &str, envs: &[String], args: &[&str]) -> Result<i3
 			if !output.status.success() {
 				let exit_status = output.status.code().unwrap_or(-1);
 				info!("exit_status {:#?}", exit_status);
-
-				//
 				return Err(format!("Command failed with exit code: {}", exit_status));
 			} else {
 				info!("output.status.code() {:#?}", output.status.code());
